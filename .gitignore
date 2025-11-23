@@ -1,0 +1,19 @@
+# 忽略 Vivado 产生的临时文件夹和日志
+*.jou
+*.log
+*.pb
+*.dcp
+*.wdb
+*.str
+.Xil/
+
+# 忽略 Vivado 工程具体的编译结果 (保留 .xpr 工程入口文件)
+vivado_prj/*.cache/
+vivado_prj/*.hw/
+vivado_prj/*.ip_user_files/
+vivado_prj/*.runs/
+vivado_prj/*.sim/
+
+# 忽略操作系统生成的文件
+.DS_Store
+Thumbs.db
