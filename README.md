@@ -4,3 +4,4 @@
 
 AIprompt：
 1.关于verilog里的存储mem是什么，怎么应用到storage上
+2.如何在input里例化所给的uart_rx模块
