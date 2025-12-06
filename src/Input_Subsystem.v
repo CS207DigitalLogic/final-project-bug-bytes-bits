@@ -214,7 +214,6 @@ module Input_Subsystem (
                         // 检查是否需要生成第二个矩阵
                         if (gen_curr_cnt + 1 < gen_total_mats) begin
                             // 需要第二个，回到等待状态，再次请求 FSM 给新地址
-                            // FSM 的 Ping-Pong 逻辑会分配另一个槽位
                             state <= S_WAIT_ADDR; 
                         end else begin
                             // 全部完成
