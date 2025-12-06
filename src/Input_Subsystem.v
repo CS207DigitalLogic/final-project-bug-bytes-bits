@@ -5,6 +5,12 @@ module Input_Subsystem (
     input w_addr_ready,           // FSM 通知：地址分配好了
     input w_is_gen_mode,          // 1=生成模式, 0=输入模式
 
+    // 任务模式控制
+    // 0 = 完整存储模式 (Storage Mode)
+    // 1 = 仅读取维度 (Read Dim Only)
+    // 2 = 仅读取ID (Read ID Only)
+    input [1:0] w_task_mode, 
+
     output reg w_input_we,
     output wire [7:0] w_real_addr, // 最终物理地址
     output reg [31:0] w_input_data,
@@ -14,7 +20,11 @@ module Input_Subsystem (
     // 握手接口
     output wire [31:0] w_dim_m, 
     output wire [31:0] w_dim_n,
-    output reg w_dims_valid       // 请求分配地址
+    output reg w_dims_valid,      // 请求分配地址 / 维度读取完成
+    
+    // ID 读取接口
+    output reg [31:0] w_input_id_val,
+    output reg w_id_valid         // ID 读取完成标志
 );
 
     // 参数定义 
@@ -24,7 +34,7 @@ module Input_Subsystem (
     parameter ASC_LF    = 10; // \n
 
     // 状态机状态定义
-    localparam S_RX_M       = 0; // 接收 m
+    localparam S_RX_M       = 0; // 接收 m (或 ID)
     localparam S_RX_N       = 1; // 接收 n
     localparam S_RX_COUNT   = 2; // 接收生成数量 (仅生成模式)
     localparam S_WAIT_ADDR  = 3; // 等待 FSM 分配地址
@@ -82,6 +92,9 @@ module Input_Subsystem (
             w_input_addr <= 0; w_input_we <= 0; w_input_data <= 0;
             w_error_flag <= 0; w_rx_done <= 0; w_dims_valid <= 0;
             
+            // [新增] 复位新接口
+            w_input_id_val <= 0; w_id_valid <= 0;
+
             state <= S_RX_M;
             header_cnt <= 0;
             reg_m <= 0; reg_n <= 0; expected_count <= 25;
@@ -91,14 +104,23 @@ module Input_Subsystem (
             w_error_flag <= 0; // 默认拉低 (脉冲)
             w_input_we <= 0;
             w_dims_valid <= 0; // 请求信号脉冲复位
+            w_id_valid <= 0;   // ID有效信号脉冲复位
 
             case (state)
-                // 1. 接收行数 m
+                // 1. 接收行数 m (或者 ID)
                 S_RX_M: if (rx_pulse) begin
                     if (rx_data >= ASC_0 && rx_data <= ASC_0+9) 
                         current_value <= current_value * 10 + (rx_data - ASC_0);
                     else if (rx_data == ASC_SPACE || rx_data == ASC_CR || rx_data == ASC_LF) begin
-                        if (current_value >= 1 && current_value <= 5) begin
+                        //  分支: 仅读取 ID 模式 (Mode 2)
+                        if (w_task_mode == 2) begin
+                            w_input_id_val <= current_value; // 输出 ID
+                            w_id_valid <= 1;                 // 握手信号
+                            current_value <= 0;
+                            state <= S_DONE;                 // 任务直接结束
+                        end
+                        // 原始分支: 读取 M
+                        else if (current_value >= 1 && current_value <= 5) begin
                             reg_m <= current_value;
                             current_value <= 0;
                             state <= S_RX_N;
@@ -116,12 +138,20 @@ module Input_Subsystem (
                             expected_count <= reg_m * current_value; // 计算总元素数
                             current_value <= 0;
                             
-                            // [分流] 生成模式去读数量，输入模式直接去要地址
-                            if (w_is_gen_mode) state <= S_RX_COUNT;
-                            else begin 
-                                gen_total_mats <= 1; // 输入模式默认只存1个
-                                gen_curr_cnt <= 0;
-                                state <= S_WAIT_ADDR; 
+                            // 分支: 仅读取维度模式 (Mode 1)
+                            if (w_task_mode == 1) begin
+                                w_dims_valid <= 1; // 借用此信号表示“维度读取完毕”
+                                state <= S_DONE;   // 任务直接结束，不申请地址
+                            end
+                            // 原始分支: 存储/生成模式 (Mode 0)
+                            else begin
+                                // [分流] 生成模式去读数量，输入模式直接去要地址
+                                if (w_is_gen_mode) state <= S_RX_COUNT;
+                                else begin 
+                                    gen_total_mats <= 1; // 输入模式默认只存1个
+                                    gen_curr_cnt <= 0;
+                                    state <= S_WAIT_ADDR; 
+                                end
                             end
                         end else w_error_flag <= 1;
                     end else w_error_flag <= 1;
