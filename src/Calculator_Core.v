@@ -51,8 +51,10 @@ module Calculator_Core (
     // =========================================================
     // 3. 计数器与辅助变量
     // =========================================================
-    reg [7:0]  cnt;          // 通用加载/写入计数器
-    reg [7:0]  target_cnt;   // 目标总数 (m*n)
+    reg [7:0] cnt;          // 通用加载/写入计数器
+    reg [7:0] next_cnt;
+    reg [7:0] target_cnt;   // 目标总数 (m*n)
+    reg [7:0] next_target_cnt;
     
     // 计算用的行列指针
     reg [3:0] row, col, k;   
@@ -65,13 +67,177 @@ module Calculator_Core (
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state<=S_IDLE;
+            cnt<=0;
+            target_cnt<=0;
+            o_calc_done<=0;
+            o_calc_we<=0;
         end
         else begin
             state<=next_state;
+            cnt<=next_cnt;
+            target_cnt<=next_target_cnt;
+            o_calc_done<=0;
+            o_calc_we<=0;
+            case (state)
+                S_IDLE: begin
+                    row<=0;
+                    col<=0;
+                    k<=0;
+                    acc_sum<=0;
+                    cnt<=0;
+                    target_cnt<=0;
+                end
+                S_LOAD_A: begin
+                    row<=0;
+                    col<=0;
+                    k<=0;
+                    acc_sum<=0;
+                    if (cnt<target_cnt) begin
+                        o_calc_req_addr<=i_op1_addr+cnt;
+                        cnt<=cnt+1;
+                    end else begin
+                        cnt<=cnt;
+                    end
+                end
+                S_LOAD_B: begin
+                    row<=0;
+                    col<=0;
+                    k<=0;
+                    acc_sum<=0;
+                    if (cnt<target_cnt) begin
+                        o_calc_req_addr<=i_op2_addr+cnt;
+                        cnt<=cnt+1;
+                    end else begin
+                        cnt<=cnt;
+                    end
+                end
+                S_CALC: begin
+                    case (i_op_code)
+                        3'd0: begin
+                            if (row<m1) begin
+                                if (col<n1) begin
+                                    mem_res[col*res_n+row]<=mem_a[row*n1+col];
+                                    cnt<=cnt+1;
+                                    col<=col+1;
+                                end else begin
+                                    col<=0;
+                                    cnt<=cnt;
+                                    row<=row+1;
+                                end
+                            end else begin
+                                cnt<=cnt;
+                            end
+                        end
+                        3'd1: begin
+                            if (row<m1) begin
+                                if (col<n1) begin
+                                    mem_res[row*n1+col]<=mem_a[row*n1+col]+mem_b[row*n1+col];
+                                    cnt<=cnt+1;
+                                    col<=col+1;
+                                end else begin
+                                    col<=0;
+                                    cnt<=cnt;
+                                    row<=row+1;
+                                end
+                            end else begin
+                                cnt<=cnt;
+                            end
+                        end
+                        3'd2: begin
+                            if (row<m1) begin
+                                if (col<n1) begin
+                                    mem_res[row*n1+col]<=mem_a[row*n1+col]*m2;
+                                    cnt<=cnt+1;
+                                    col<=col+1;
+                                end else begin
+                                    col<=0;
+                                    row<=row+1;
+                                end
+                            end else begin
+                                cnt<=cnt;
+                            end
+                        end
+                        3'd3: begin
+                            if (row<m1) begin
+                                if (col<n2) begin
+                                    if (k<n1) begin
+                                        acc_sum<=acc_sum+mem_a[row*n1+k]*mem_b[k*m2+col];
+                                        k<=k+1;
+                                    end else begin
+                                        k<=0;
+                                        mem_res[row*n2+col]<=acc_sum;
+                                        acc_sum<=0;
+                                        cnt<=cnt+1;
+                                        col<=col+1;
+                                    end
+                                end else begin
+                                    col<=0;
+                                    row<=row+1;
+                                end
+                            end else begin
+                                cnt<=cnt;
+                            end
+                        end
+                        default: begin //默认矩阵乘法
+                            if (row<m1) begin
+                                if (col<n2) begin
+                                    if (k<n1) begin
+                                        acc_sum<=acc_sum+mem_a[row*n1+k]*mem_b[k*m2+col];
+                                        k<=k+1;
+                                    end else begin
+                                        k<=0;
+                                        mem_res[row*n2+col]<=acc_sum;
+                                        acc_sum<=0;
+                                        cnt<=cnt+1;
+                                        col<=col+1;
+                                    end
+                                end else begin
+                                    col<=0;
+                                    row<=row+1;
+                                end
+                            end else begin
+                                cnt<=cnt;
+                            end
+                        end
+                    endcase
+                end
+                S_WRITE: begin
+                    row<=0;
+                    col<=0;
+                    k<=0;
+                    acc_sum<=0;
+                    if (cnt<target_cnt) begin
+                        o_calc_we<=1;
+                        o_calc_waddr<=i_res_addr+cnt;
+                        o_calc_wdata<=mem_res[cnt];
+                        cnt<=cnt+1;
+                    end else begin
+                        cnt<=cnt;
+                    end
+                end
+                S_DONE: begin
+                    row<=0;
+                    col<=0;
+                    k<=0;
+                    acc_sum<=0;
+                    o_calc_done<=1;
+                end
+                default: begin
+                    row<=0;
+                    col<=0;
+                    k<=0;
+                    acc_sum<=0;
+                    cnt<=0;
+                    target_cnt<=0;
+                end
+            endcase
         end
     end
 
     always @(*) begin
+        next_cnt=cnt;
+        next_target_cnt=target_cnt;
+        next_state=state;
         case(state)
             S_IDLE: begin
                if (i_start_calc) begin
@@ -79,53 +245,108 @@ module Calculator_Core (
                     n1=i_op1_n;
                     m2=i_op2_m;
                     n2=i_op2_n;
-                    cnt=0;
-                    target_cnt=m1*n1;
+                    next_cnt=0;
+                    next_target_cnt=m1*n1;
                     next_state=S_LOAD_A;
+                    if (i_op_code==3'd0) begin
+                        res_m=n1;
+                        res_n=m1;
+                    end else if (i_op_code==3'd1 or i_op_code==3'd2) begin
+                        res_m=m1;
+                        res_n=n1;
+                    end else begin
+                        res_m=m1;
+                        res_n=n2;
+                    end
                end
                else begin
                     next_state=S_IDLE;
+                    next_cnt=cnt;
+                    next_target_cnt=target_cnt;
                end
             end
             S_LOAD_A: begin
                 if (cnt>=target_cnt) begin
-                    cnt=0;
+                    next_cnt=0;
                     if (i_op_code==3'd0 or i_op_code==3'd2) begin
-                        row=0;
-                        col=0;
-                        k=0;
-                        acc_sum=0;
-                        next_state=CALC;
+                        next_target_cnt=res_m*res_n;
+                        next_state=S_CALC;
                     end else begin
-                        target_cnt=m2*n2;
+                        next_target_cnt=m2*n2;
                         next_state=S_LOAD_B;
                     end
                 end else begin
+                    next_target_cnt=target_cnt;
                     next_state=S_LOAD_A;
+                    next_cnt=cnt;
                 end
             end
             S_LOAD_B: begin
                 if (cnt>=target_cnt) begin
-                    cnt=0;
-                    row=0;
-                    col=0;
-                    k=0;
-                    acc_sum=0;
-                    next_state=CALC;
+                    next_cnt=0;
+                    next_target_cnt=res_m*res_n;
+                    next_state=S_CALC;
                 end else begin
+                    next_target_cnt=target_cnt;
                     next_state=S_LOAD_B;
+                    next_cnt=cnt;
                 end
             end
             S_CALC: begin
-
+                if (cnt>=target_cnt) begin
+                    next_cnt=0;
+                    next_target_cnt=target_cnt;
+                    next_state=S_WRITE;
+                end else begin
+                    next_target_cnt=target_cnt;
+                    next_state=S_CALC;
+                    next_cnt=cnt;
+                end
             end
             S_WRITE: begin
-
+                if (cnt>=target_cnt) begin
+                    next_cnt=0;
+                    next_target_cnt=0;
+                    next_state=S_DONE;
+                end else begin
+                    next_cnt=cnt;
+                    next_target_cnt=target_cnt;
+                    next_state=S_WRITE;
+                end 
             end
             S_DONE: begin
-                
+                next_cnt=cnt;
+                next_target_cnt=target_cnt;
+                next_state=S_IDLE;
+            end
+            default: begin
+                next_cnt=0;
+                next_target_cnt=0;
+                next_state=S_IDLE;
             end
         endcase
     end
+    
+    reg [3:0] state1, state2;
+    reg [7:0] cap_addr1, cap_addr2;
 
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state1<=0;
+            state2<=0;
+            cap_addr1<=0;
+            cap_addr2<=0;
+        end else begin
+            state2<=state1;
+            state1<=state;
+            cap_addr2<=cap_addr1;
+            cap_addr1<=o_calc_req_addr;
+            if (state2==S_LOAD_A) begin
+                mem_a[cap_addr2-i_op1_addr]<=i_storage_rdata;
+            end else if (state2==S_LOAD_B) begin
+                mem_b[cap_addr2-i_op2_addr]<=i_storage_rdata;
+            end else begin
+            end
+        end
+    end
 endmodule
