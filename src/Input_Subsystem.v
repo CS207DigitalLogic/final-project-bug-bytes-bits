@@ -38,11 +38,10 @@ module Input_Subsystem (
     localparam S_RX_N       = 1; // 接收 n
     localparam S_RX_COUNT   = 2; // 接收生成数量 (仅生成模式)
     localparam S_WAIT_ADDR  = 3; // 等待 FSM 分配地址
-    localparam S_WRITE_HEAD = 4; // 写入头信息 (m, n)
-    localparam S_PRE_CLEAR  = 5; // 预清零 (输入模式刷0)
-    localparam S_USER_INPUT = 6; // 用户输入数据 (覆盖0)
-    localparam S_GEN_FILL   = 7; // 自动填充随机数 (生成模式)
-    localparam S_DONE       = 8; // 结束
+    localparam S_PRE_CLEAR  = 4; // 预清零 (输入模式刷0)
+    localparam S_USER_INPUT = 5; // 用户输入数据 (覆盖0)
+    localparam S_GEN_FILL   = 6; // 自动填充随机数 (生成模式)
+    localparam S_DONE       = 7; // 结束
 
     // --- 内部寄存器 ---
     reg [31:0] current_value;
@@ -56,7 +55,6 @@ module Input_Subsystem (
 
     // 状态机寄存器
     reg [3:0] state;
-    reg [1:0] header_cnt;      // 头信息写入计数
 
     // 连线与实例化
     wire [7:0] rx_data;
@@ -173,53 +171,39 @@ module Input_Subsystem (
 
                 // 4. 向 FSM 申请基地址
                 S_WAIT_ADDR: begin
-                    w_dims_valid <= 1; // 拉高请求信号
+                    w_dims_valid <= 1; 
                     if (w_addr_ready) begin
-                        state <= S_WRITE_HEAD; // 拿到地址，去写头信息
-                        header_cnt <= 0;
-                    end
-                end
-
-                // 5. 写入头信息 (m, n)
-                S_WRITE_HEAD: begin
-                    w_input_we <= 1;
-                    if (header_cnt == 0) begin
-                        w_input_addr <= 0; // 相对地址0
-                        w_input_data <= reg_m;
-                        header_cnt <= 1;
-                    end 
-                    else if (header_cnt == 1) begin
-                        w_input_addr <= 1; // 相对地址1
-                        w_input_data <= reg_n;
+                        // 直接跳转到数据填充，跳过写头
+                        // 重置相对地址为 0 (直接写数据)
+                        w_input_addr <= 0; 
                         
-                        // [分流] 决定下一步去哪
-                        w_input_addr <= 2; // 准备操作数据区
                         if (w_is_gen_mode) state <= S_GEN_FILL;
                         else state <= S_PRE_CLEAR;
                     end
                 end
 
-                // 6. 输入模式分支: 预清零 (Pre-Clear)
+
+                // 5. 输入模式分支: 预清零
                 S_PRE_CLEAR: begin
                     // 刷0
                     w_input_we <= 1;
                     w_input_data <= 0;
-                    if ((w_input_addr - 2) < expected_count - 1) begin
+                    if (w_input_addr < expected_count - 1) begin
                         w_input_addr <= w_input_addr + 1;
                     end else begin
                         w_input_we <= 0;
-                        w_input_addr <= 2; // 指针回退，等待用户输入覆盖
+                        w_input_addr <= 0; // 指针回退，等待用户输入覆盖
                         state <= S_USER_INPUT;
                     end
                 end
 
-                // 7. 输入模式分支: 用户输入 (覆盖0)
+                // 6. 输入模式分支: 用户输入 (覆盖0)
                 S_USER_INPUT: if (rx_pulse) begin
                     if (rx_data >= ASC_0 && rx_data <= ASC_0+9) 
                         current_value <= current_value * 10 + (rx_data - ASC_0);
                     else if (rx_data == ASC_SPACE || rx_data == ASC_CR || rx_data == ASC_LF) begin
                         if (current_value > 9) w_error_flag <= 1;
-                        else if ((w_input_addr - 2) < expected_count) begin
+                        else if (w_input_addr < expected_count) begin
                             w_input_data <= current_value;
                             w_input_we <= 1;
                             w_input_addr <= w_input_addr + 1;
@@ -229,12 +213,12 @@ module Input_Subsystem (
                     else w_error_flag <= 1;
                 end
 
-                // 8. 生成模式分支: 自动填充随机数
+                // 7. 生成模式分支: 自动填充随机数
                 S_GEN_FILL: begin
                     w_input_we <= 1;
                     w_input_data <= random_val; // 填入随机数
                     
-                    if ((w_input_addr - 2) < expected_count - 1) begin
+                    if (w_input_addr < expected_count - 1) begin
                         w_input_addr <= w_input_addr + 1;
                     end else begin
                         // 当前矩阵填完了
