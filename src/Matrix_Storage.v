@@ -13,6 +13,6 @@ always @(posedge clk) begin
     end
 end
 
-assign w_storage_out = mem[w_storage_addr];
+assign w_storage_out = mem[w_storage_addr];//异步读取数据
     
 endmodule

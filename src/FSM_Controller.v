@@ -29,11 +29,12 @@ module FSM_Controller (
     output reg w_en_display,      // FSM: 启动展示
     // 0=单矩阵(回显), 1=列表(选数), 2=汇总(主菜单)
     output reg [1:0] w_disp_mode, 
-    // 【新增】告诉 Display 这一类矩阵的信息
+    // 告诉 Display 这一类矩阵的信息
     output reg [7:0] w_disp_base_addr, // 起始基地址
     output reg [1:0] w_disp_total_cnt, // 总个数 (0,1,2)
     output reg [31:0] w_disp_m,   // 维度 M
     output reg [31:0] w_disp_n,   // 维度 N
+    output reg [1:0] w_disp_selected_id,
     // 单矩阵展示时的目标地址 (复用 w_disp_base_addr 也可以，为了清晰保留这个)
     output reg [7:0] w_disp_target_addr, 
 
@@ -87,6 +88,7 @@ module FSM_Controller (
     // 筛选结果寄存器
     reg [1:0] r_hit_type_idx; // 命中了账本的哪一行 (0~3)
     reg       r_hit_found;    // 是否找到匹配项
+    reg [1:0] r_selected_id;
     
     reg [7:0] r_op1_addr;   
     reg [31:0] r_op1_m, r_op1_n; 
@@ -254,27 +256,29 @@ module FSM_Controller (
                     end
                 end
 
-                // 读 ID: 直接判断 1 或 2
+                // -----------------------------------------------------------
+                // 计算流程 Step 5: Input 读取用户选的 ID
+                // -----------------------------------------------------------
                 S_CALC_GET_ID: begin
                     w_en_input <= 1;
                     w_task_mode <= 2; // Mode 2: Read ID
                     
                     if (w_id_valid) begin
-                        // 检查合法性: 输入值必须 <= 现有的数量 (且>0)
+                        // 1. 合法性检查: 输入 ID 必须 <= 现有的数量 (且 > 0)
                         if (i_input_id_val > 0 && i_input_id_val <= lut_valid_cnt[r_hit_type_idx]) begin
                             
-                            // 计算物理地址: Base + (ID-1)*Size
-                            // i_input_id_val 是 1 或 2
-                            // (ID-1) 就是 0 或 1
-                            
-                            // 临时计算目标地址
-                            // 这里假设 single_mat_size 仍然保持为 (m*n)
-                            // 注意：i_dim_m 和 i_dim_n 此时仍是有效的
-                            
-                            w_disp_target_addr <= lut_start_addr[r_hit_type_idx] + 
-                                                ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
+                            // 2. 【新增】记住用户选的 ID (1 或 2)
+                            // i_input_id_val 来自 Input 模块，是 32 位，我们取低 2 位即可
+                            r_selected_id <= i_input_id_val[1:0];
 
-                            // 记录到操作数寄存器
+                            // 3. 计算物理地址 (这个必须保留，给 Calculator 用的！)
+                            // Calculator 还是要去 Storage 读原始数据的
+                            // Temp Address Calculation:
+                            // Addr = Base + (ID-1) * (M*N)
+                            
+                            // 注意：这里仍然需要计算物理地址给 w_op1/op2_addr
+                            // 这里的 single_mat_size = i_dim_m * i_dim_n (无头信息版本)
+                            
                             if (r_stage == 0) begin
                                 w_op1_addr <= lut_start_addr[r_hit_type_idx] + 
                                               ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
@@ -283,27 +287,35 @@ module FSM_Controller (
                             end else begin
                                 w_op2_addr <= lut_start_addr[r_hit_type_idx] + 
                                               ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
-                                // 这里可以加 m1==m2 的校验
+                                // 这里建议加上 m1==m2 等维度匹配检查
                             end
 
                             w_en_input <= 0;
                             current_state <= S_CALC_SHOW_MAT;
                         end
                         else begin
+                            // ID 无效 (例如只有 1 个矩阵，用户输了 2)
                             current_state <= S_ERROR;
                         end
                     end
                 end
 
+                // -----------------------------------------------------------
+                // 计算流程 Step 6: 缓存回显确认
+                // -----------------------------------------------------------
                 S_CALC_SHOW_MAT: begin
                     w_en_display <= 1;
-                    w_disp_mode <= 0; // 单矩阵内容模式 (Single)
-                    w_disp_m <= r_op1_m; // 确保使用正确的维度
-                    w_disp_n <= r_op1_n;
-                    // w_disp_target_addr 在上一步已经算好了
+                    
+                    w_disp_mode <= 3; // Mode 3: 缓存回显模式 (Cache Recall)
+                    w_disp_selected_id <= r_selected_id; // 告诉 Display: "显示你缓存里的第 X 个"
+                    
+                    // 注意：w_disp_m/n 已经在 S_CALC_SHOW_LIST 阶段被 Display 缓存了
+                    // 只要此时不改变它们，Display 就会用缓存的维度
                     
                     if (w_disp_done) begin
                         w_en_display <= 0;
+                        
+                        // 逻辑跳转：找下一个操作数 or 开始计算
                         if (r_stage < r_target_stage) begin
                             r_stage <= r_stage + 1;
                             current_state <= S_CALC_GET_DIM; 
