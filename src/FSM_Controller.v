@@ -42,6 +42,10 @@ module FSM_Controller (
     output reg [31:0] w_disp_n,       // 维度 N
     output reg [1:0] w_disp_selected_id, // 告诉 Display 回显第几个缓存 (1或2)
     
+    // [新增] 输出给 Display 的统计信息 (确保 Mode 2 正常工作)
+    output wire [7:0] w_system_total_count, 
+    output wire [2:0] w_system_types_count,
+
     // (单矩阵模式备用目标地址，如果 Display 逻辑依赖它)
     output reg [7:0] w_disp_target_addr, 
 
@@ -56,7 +60,7 @@ module FSM_Controller (
     output reg [7:0] w_res_addr,  // 结果存放地址 (需要FSM分配)
     
     // 调试端口
-    output reg [3:0] w_state
+    output wire [3:0] w_state
 );
 
     // =========================================================================
@@ -67,21 +71,21 @@ module FSM_Controller (
     localparam S_GEN_MODE       = 4'd2; 
     
     // 计算流程状态
-    localparam S_CALC_SELECT_OP = 4'd3; 
-    localparam S_CALC_GET_DIM   = 4'd4; 
+    localparam S_CALC_SELECT_OP    = 4'd3; 
+    localparam S_CALC_GET_DIM      = 4'd4; 
     localparam S_CALC_SHOW_SUMMARY = 4'd5;
-    localparam S_CALC_FILTER    = 4'd6; // 查表筛选
-    localparam S_CALC_SHOW_LIST = 4'd7; // 显示列表
-    localparam S_CALC_GET_ID    = 4'd8; // 读ID (1或2)
-    localparam S_CALC_SHOW_MAT  = 4'd9; // 回显确认
-    localparam S_CALC_EXECUTE   = 4'd10; // 执行计算 & 登记
-    localparam S_CALC_RES_SHOW  = 4'd11;// 结果展示
+    localparam S_CALC_FILTER       = 4'd6; // 查表筛选
+    localparam S_CALC_SHOW_LIST    = 4'd7; // 显示列表
+    localparam S_CALC_GET_ID       = 4'd8; // 读ID (1或2)
+    localparam S_CALC_SHOW_MAT     = 4'd9; // 回显确认
+    localparam S_CALC_EXECUTE      = 4'd10; // 执行计算 & 登记
+    localparam S_CALC_RES_SHOW     = 4'd11;// 结果展示
     // 主菜单-展示模式专用状态
     localparam S_MENU_DISP_GET_DIM = 4'd12;
     localparam S_MENU_DISP_FILTER  = 4'd13;
     localparam S_MENU_DISP_SHOW    = 4'd14;
     
-    localparam S_ERROR          = 4'd15;
+    localparam S_ERROR             = 4'd15;
 
     localparam MAX_TYPES = 4;
 
@@ -123,8 +127,10 @@ module FSM_Controller (
     assign btn_confirm_pose = btn_d0 & ~btn_d1;
 
     // =========================================================================
-    // 1. 组合逻辑：MMU 查表与地址计算 (用于 Input/Gen 模式)
+    // 0. 辅助组合逻辑 (MMU查表 & Display Mux & 统计)
     // =========================================================================
+    
+    // --- MMU 查表逻辑 ---
     reg       calc_match_found;
     reg [2:0] calc_match_index;
     reg [7:0] calc_final_addr;
@@ -159,9 +165,7 @@ module FSM_Controller (
         end
     end
 
-    // =========================================================================
-    // 2. 组合逻辑：Display 参数 MUX (核心控制)
-    // =========================================================================
+    // --- Display 参数 MUX ---
     always @(*) begin
         // 默认值
         w_disp_m = 0; w_disp_n = 0; w_disp_total_cnt = 0; w_disp_base_addr = 0;
@@ -182,7 +186,6 @@ module FSM_Controller (
         end
         else if (current_state == S_MENU_DISP_SHOW) begin
             // --- 场景: 主菜单回显展示 ---
-            // 直接使用 Input 模块当前的维度寄存器
             w_disp_m         = i_dim_m; 
             w_disp_n         = i_dim_n;
             w_disp_total_cnt = 1;
@@ -197,56 +200,151 @@ module FSM_Controller (
         end
     end
 
+    // --- 统计输出逻辑 ---
+    assign w_system_total_count = lut_valid_cnt[0] + lut_valid_cnt[1] + lut_valid_cnt[2] + lut_valid_cnt[3];
+    assign w_system_types_count = lut_count;
+    assign w_state = current_state;
+
     // =========================================================================
-    // 3. 时序逻辑：主状态机
+    // Stage 1: 状态寄存器更新 (Sequential Logic)
+    // =========================================================================
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) 
+            current_state <= S_IDLE;
+        else 
+            current_state <= next_state;
+    end
+
+    // =========================================================================
+    // Stage 2: 次态逻辑判断 (Combinational Logic)
+    // =========================================================================
+    always @(*) begin
+        next_state = current_state; // 默认保持
+
+        case (current_state)
+            S_IDLE: begin
+                if (btn_confirm_pose) begin
+                    case (sw[1:0])
+                        2'b00: next_state = S_INPUT_MODE;
+                        2'b01: next_state = S_GEN_MODE;
+                        2'b10: next_state = S_CALC_SELECT_OP;
+                        2'b11: next_state = S_MENU_DISP_GET_DIM;
+                    endcase
+                end
+            end
+
+            S_INPUT_MODE, S_GEN_MODE: begin
+                if (w_rx_done) next_state = S_IDLE;
+            end
+
+            S_MENU_DISP_GET_DIM: begin
+                if (w_rx_done) next_state = S_MENU_DISP_SHOW;
+            end
+
+            S_MENU_DISP_SHOW: begin
+                if (w_disp_done) next_state = S_IDLE;
+            end
+
+            S_CALC_SELECT_OP: begin
+                if (btn_confirm_pose) next_state = S_CALC_SHOW_SUMMARY;
+            end
+
+            S_CALC_SHOW_SUMMARY: begin
+                if (w_disp_done) next_state = S_CALC_GET_DIM;
+            end
+
+            S_CALC_GET_DIM: begin
+                if (w_dims_valid) next_state = S_CALC_FILTER;
+            end
+
+            S_CALC_FILTER: begin
+                next_state = S_CALC_SHOW_LIST;
+            end
+
+            S_CALC_SHOW_LIST: begin
+                if (r_hit_found == 0) next_state = S_ERROR;
+                else if (w_disp_done) next_state = S_CALC_GET_ID;
+            end
+
+            S_CALC_GET_ID: begin
+                if (w_id_valid) begin
+                    if (i_input_id_val > 0 && i_input_id_val <= lut_valid_cnt[r_hit_type_idx])
+                        next_state = S_CALC_SHOW_MAT;
+                    else
+                        next_state = S_ERROR;
+                end
+            end
+
+            S_CALC_SHOW_MAT: begin
+                if (w_disp_done) begin
+                    if (r_stage < r_target_stage) next_state = S_CALC_GET_DIM;
+                    else next_state = S_CALC_EXECUTE;
+                end
+            end
+
+            S_CALC_EXECUTE: begin
+                if (w_calc_done) next_state = S_CALC_RES_SHOW;
+            end
+
+            S_CALC_RES_SHOW: begin
+                if (w_disp_done) next_state = S_IDLE;
+            end
+
+            S_ERROR: begin
+                if (btn_confirm_pose) next_state = S_IDLE;
+            end
+            
+            default: next_state = S_IDLE;
+        endcase
+    end
+
+    // =========================================================================
+    // Stage 3: 数据输出与寄存器更新 (Sequential Logic)
     // =========================================================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            current_state <= S_IDLE;
+            // 数据复位
             lut_count <= 0; free_ptr <= 0;
             for(i=0; i<MAX_TYPES; i=i+1) lut_valid_cnt[i] <= 0;
             for(i=0; i<MAX_TYPES; i=i+1) lut_idx[i] <= 0;
             
+            // 输出复位
             w_en_input <= 0; w_en_display <= 0; w_start_calc <= 0;
             w_addr_ready <= 0;
-            // 复位寄存器
             r_res_m <= 0; r_res_n <= 0;
+            led <= 0;
+            
+            // 中间变量复位
+            btn_d0 <= 0; btn_d1 <= 0;
         end 
         else begin
-            btn_d0 <= btn[0];
-            btn_d1 <= btn_d0;
+            // 默认值 (脉冲信号自动拉低)
             w_addr_ready <= 0; 
             w_start_calc <= 0;
+            // 保持 enable 信号直到状态改变，或者在状态内手动拉低
+            // 这里遵循原逻辑：状态内赋值，离开状态后在 default 或新状态被覆盖
+            // 但为安全起见，我们根据 current_state 显式控制
+
+            // 按键消抖
+            btn_d0 <= btn[0];
+            btn_d1 <= btn_d0;
 
             case (current_state)
-                // -----------------------------------------------------------
-                // IDLE: 模式选择
-                // -----------------------------------------------------------
                 S_IDLE: begin
-                    w_en_input <= 0; w_en_display <= 0;
+                    w_en_input <= 0; 
+                    w_en_display <= 0;
                     led <= 8'b0000_0001;
-                    
-                    if (btn_confirm_pose) begin
-                        case (sw[1:0])
-                            2'b00: current_state <= S_INPUT_MODE;
-                            2'b01: current_state <= S_GEN_MODE;
-                            2'b10: current_state <= S_CALC_SELECT_OP;
-                            2'b11: current_state <= S_MENU_DISP_GET_DIM;
-                        endcase
-                    end
                 end
 
-                // -----------------------------------------------------------
-                // 基础模式: 存矩阵
-                // -----------------------------------------------------------
                 S_INPUT_MODE, S_GEN_MODE: begin
                     w_en_input <= 1;
-                    w_task_mode <= 0; // Mode 0: 完整存储
+                    w_task_mode <= 0;
                     w_is_gen_mode <= (current_state == S_GEN_MODE);
-
+                    
+                    // MMU 动态分配逻辑
                     if (w_dims_valid && !w_addr_ready) begin
                         w_base_addr_to_input <= calc_final_addr;
-                        w_addr_ready <= 1;
+                        w_addr_ready <= 1; // 握手脉冲
 
                         if (calc_match_found) begin
                             lut_idx[calc_match_index] <= ~lut_idx[calc_match_index];
@@ -268,175 +366,104 @@ module FSM_Controller (
                     end
                     
                     if (w_rx_done) begin
-                        current_state <= S_IDLE;
                         w_en_input <= 0;
                     end
                 end
 
-                // -----------------------------------------------------------
-                // 主菜单功能: 矩阵展示 (输入维度 -> 展示该维度所有矩阵)
-                // -----------------------------------------------------------
-                
-                // 1. 让 Input 模块读取 m, n
                 S_MENU_DISP_GET_DIM: begin
                     w_en_input <= 1;
                     w_task_mode <= 0;
-
                     w_base_addr_to_input <= free_ptr;
                     
-                    // Input 模块握手逻辑 (Mode 0 需要先握手给地址)
                     if (w_dims_valid && !w_addr_ready) begin
                         w_addr_ready <= 1;
                     end
-                    
-                    // 等待 Input 模块全部接收完成 (w_rx_done)
                     if (w_rx_done) begin
                         w_en_input <= 0;
-                        current_state <= S_MENU_DISP_SHOW;
                     end
                 end
 
-                // 2. 调用 Display 显示列表
                 S_MENU_DISP_SHOW: begin
                     w_en_display <= 1;
-                    w_disp_mode <= 0;   // ★ Mode 0: 单矩阵展示模式
-                    
-                    // 告诉 Display 去哪里读 (刚才 Input 存的地方)
-                    w_disp_base_addr <= free_ptr; 
-                    
-                    // 告诉 Display 维度 (Input 模块刚读到的)
-                    w_disp_m <= i_dim_m;
-                    w_disp_n <= i_dim_n;
-                    w_disp_total_cnt <= 1; // 只有一个矩阵
-                    
-                    if (w_disp_done) begin
-                        w_en_display <= 0;
-                        // 展示完毕，直接回主菜单
-                        // 注意：这里没有 update free_ptr，
-                        // 所以下次操作会直接覆盖这个临时数据，非常节省空间
-                        current_state <= S_IDLE;
-                    end
+                    w_disp_mode <= 0;
+                    if (w_disp_done) w_en_display <= 0;
                 end
 
-                // -----------------------------------------------------------
-                // 计算流程
-                // -----------------------------------------------------------
                 S_CALC_SELECT_OP: begin
                     r_op_code <= sw[7:5]; 
-                    if (sw[7:5] == 3'b000) r_target_stage <= 0; // 转置只需要1个
+                    if (sw[7:5] == 3'b000) r_target_stage <= 0;
                     else r_target_stage <= 1; 
                     r_stage <= 0; 
-                    
-                    if (btn_confirm_pose) 
-                        current_state <= S_CALC_SHOW_SUMMARY;
                 end
 
                 S_CALC_SHOW_SUMMARY: begin
                     w_en_display <= 1;
-                    w_disp_mode  <= 2; // ★ Mode 2: 触发 Display 里的汇总模式逻辑
-                    
-                    // FSM 的 MUX 逻辑里已经写好了 Mode 2 对应的数据源 (行120-122)，这里直接用就行
-                    
-                    if (w_disp_done) begin
-                        w_en_display <= 0;
-                        current_state <= S_CALC_GET_DIM; // 展示完了，再去让用户选维度
-                    end
+                    w_disp_mode  <= 2;
+                    if (w_disp_done) w_en_display <= 0;
                 end
 
                 S_CALC_GET_DIM: begin
                     w_en_input <= 1;
-                    w_task_mode <= 1; // Mode 1: Query Dim
-                    
-                    if (w_dims_valid) begin
-                        w_en_input <= 0;
-                        current_state <= S_CALC_FILTER;
-                    end
+                    w_task_mode <= 1; 
+                    if (w_dims_valid) w_en_input <= 0;
                 end
 
                 S_CALC_FILTER: begin
                     r_hit_found <= 0;
                     r_hit_type_idx <= 0;
-
                     for (i=0; i<MAX_TYPES; i=i+1) begin
                         if (i < lut_count && lut_m[i] == i_dim_m && lut_n[i] == i_dim_n && lut_valid_cnt[i] > 0) begin
                             r_hit_found <= 1;
                             r_hit_type_idx <= i[1:0]; 
                         end
                     end
-                    current_state <= S_CALC_SHOW_LIST;
                 end
 
                 S_CALC_SHOW_LIST: begin
-                    if (r_hit_found == 0) begin
-                         current_state <= S_ERROR;
-                    end
-                    else begin
+                    if (r_hit_found != 0) begin
                         w_en_display <= 1;
-                        w_disp_mode <= 1; // List Mode
-                        // MUX 已经处理了 w_disp_m 等参数的赋值
-                        
-                        if (w_disp_done) begin
-                            w_en_display <= 0;
-                            current_state <= S_CALC_GET_ID;
-                        end
+                        w_disp_mode <= 1;
+                        if (w_disp_done) w_en_display <= 0;
                     end
                 end
 
                 S_CALC_GET_ID: begin
                     w_en_input <= 1;
-                    w_task_mode <= 2; // Mode 2: Read ID
+                    w_task_mode <= 2;
                     
                     if (w_id_valid) begin
                         if (i_input_id_val > 0 && i_input_id_val <= lut_valid_cnt[r_hit_type_idx]) begin
-                            
                             r_selected_id <= i_input_id_val[1:0];
-
-                            // 记录操作数信息 (物理地址 & 维度)
                             if (r_stage == 0) begin
-                                w_op1_addr <= lut_start_addr[r_hit_type_idx] + 
-                                              ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
+                                w_op1_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
                                 r_op1_m <= i_dim_m;
                                 r_op1_n <= i_dim_n;
                             end else begin
-                                w_op2_addr <= lut_start_addr[r_hit_type_idx] + 
-                                              ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
+                                w_op2_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
                                 r_op2_m <= i_dim_m;
                                 r_op2_n <= i_dim_n;
                             end
-
                             w_en_input <= 0;
-                            current_state <= S_CALC_SHOW_MAT;
-                        end
-                        else begin
-                            current_state <= S_ERROR;
                         end
                     end
                 end
 
                 S_CALC_SHOW_MAT: begin
                     w_en_display <= 1;
-                    w_disp_mode <= 3; // Mode 3: Cache Recall
+                    w_disp_mode <= 3; 
                     w_disp_selected_id <= r_selected_id;
-                    
                     if (w_disp_done) begin
                         w_en_display <= 0;
-                        
-                        if (r_stage < r_target_stage) begin
-                            r_stage <= r_stage + 1;
-                            current_state <= S_CALC_GET_DIM; 
-                        end
-                        else begin
-                            current_state <= S_CALC_EXECUTE; 
-                        end
+                        if (r_stage < r_target_stage) r_stage <= r_stage + 1;
                     end
                 end
 
                 S_CALC_EXECUTE: begin
                     w_start_calc <= 1; 
                     w_op_code <= r_op_code;
-                    w_res_addr <= free_ptr; // 分配结果存放地址
+                    w_res_addr <= free_ptr; 
                     
-                    // --- 预判结果维度 ---
+                    // 预判结果维度
                     if (r_op_code == 3'b000) begin // 转置
                         r_res_m <= r_op1_n; r_res_n <= r_op1_m;
                     end
@@ -449,43 +476,30 @@ module FSM_Controller (
                     
                     if (w_calc_done) begin
                         w_start_calc <= 0;
-                        
-                        // --- 登记新矩阵到账本 ---
+                        // 登记新矩阵
                         if (lut_count < MAX_TYPES) begin
                             lut_m[lut_count] <= r_res_m;
                             lut_n[lut_count] <= r_res_n;
-                            lut_start_addr[lut_count] <= free_ptr; // 结果存在 free_ptr
+                            lut_start_addr[lut_count] <= free_ptr; 
                             lut_valid_cnt[lut_count] <= 1;
                             lut_idx[lut_count] <= 1;
-                            
-                            // 移动空闲指针
                             free_ptr <= free_ptr + (r_res_m * r_res_n);
                             lut_count <= lut_count + 1;
                         end
-                        
-                        current_state <= S_CALC_RES_SHOW; 
                     end
                 end
                 
                 S_CALC_RES_SHOW: begin
                     w_en_display <= 1;
-                    w_disp_mode <= 0; // Mode 0: 单矩阵展示 (Display直接读Storage)
-                    // MUX 会根据 state==S_CALC_RES_SHOW 自动切换参数
-                    
-                    if (w_disp_done) begin
-                        w_en_display <= 0;
-                        current_state <= S_IDLE;
-                    end
+                    w_disp_mode <= 0; 
+                    if (w_disp_done) w_en_display <= 0;
                 end
 
                 S_ERROR: begin
                     led <= 8'b1111_1111;
-                    if (btn_confirm_pose) current_state <= S_IDLE;
                 end
             endcase
         end
     end
-    
-    always @(*) w_state = current_state;
 
 endmodule
