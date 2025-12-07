@@ -69,16 +69,17 @@ module FSM_Controller (
     // 计算流程状态
     localparam S_CALC_SELECT_OP = 4'd3; 
     localparam S_CALC_GET_DIM   = 4'd4; 
-    localparam S_CALC_FILTER    = 4'd5; // 查表筛选
-    localparam S_CALC_SHOW_LIST = 4'd6; // 显示列表
-    localparam S_CALC_GET_ID    = 4'd7; // 读ID (1或2)
-    localparam S_CALC_SHOW_MAT  = 4'd8; // 回显确认
-    localparam S_CALC_EXECUTE   = 4'd9; // 执行计算 & 登记
-    localparam S_CALC_RES_SHOW  = 4'd10;// 结果展示
+    localparam S_CALC_SHOW_SUMMARY = 4'd5;
+    localparam S_CALC_FILTER    = 4'd6; // 查表筛选
+    localparam S_CALC_SHOW_LIST = 4'd7; // 显示列表
+    localparam S_CALC_GET_ID    = 4'd8; // 读ID (1或2)
+    localparam S_CALC_SHOW_MAT  = 4'd9; // 回显确认
+    localparam S_CALC_EXECUTE   = 4'd10; // 执行计算 & 登记
+    localparam S_CALC_RES_SHOW  = 4'd11;// 结果展示
     // 主菜单-展示模式专用状态
-    localparam S_MENU_DISP_GET_DIM = 4'd11;
-    localparam S_MENU_DISP_FILTER  = 4'd12;
-    localparam S_MENU_DISP_SHOW    = 4'd13;
+    localparam S_MENU_DISP_GET_DIM = 4'd12;
+    localparam S_MENU_DISP_FILTER  = 4'd13;
+    localparam S_MENU_DISP_SHOW    = 4'd14;
     
     localparam S_ERROR          = 4'd15;
 
@@ -327,7 +328,19 @@ module FSM_Controller (
                     r_stage <= 0; 
                     
                     if (btn_confirm_pose) 
-                        current_state <= S_CALC_GET_DIM;
+                        current_state <= S_CALC_SHOW_SUMMARY;
+                end
+
+                S_CALC_SHOW_SUMMARY: begin
+                    w_en_display <= 1;
+                    w_disp_mode  <= 2; // ★ Mode 2: 触发 Display 里的汇总模式逻辑
+                    
+                    // FSM 的 MUX 逻辑里已经写好了 Mode 2 对应的数据源 (行120-122)，这里直接用就行
+                    
+                    if (w_disp_done) begin
+                        w_en_display <= 0;
+                        current_state <= S_CALC_GET_DIM; // 展示完了，再去让用户选维度
+                    end
                 end
 
                 S_CALC_GET_DIM: begin

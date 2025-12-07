@@ -15,11 +15,17 @@ module Display_Subsystem (
 
     // 缓存回显时的选择 ID (1 或 2)
     input wire [1:0]  w_disp_selected_id,
+
+    // [新增] 汇总模式接口
+    input wire [7:0] i_system_total_count, // 系统总共有多少个矩阵
+    input wire [2:0] i_system_types_count, // 系统总共有几种规格
+    output reg [1:0] o_lut_idx_req,        // 告诉 FSM 我现在想看第几个规格的数据
+
     // --- Storage 交互接口 ---
     input wire [31:0] w_storage_rdata, // 读回的数据
     output reg [7:0]  w_disp_req_addr, // 读地址
 
-    // --- UART 物理接口 (修改处) ---
+    // --- UART 物理接口 ---
     output wire uart_tx_pin,          // 直接输出到 FPGA 串口引脚
 
     // --- 握手 ---
@@ -63,7 +69,7 @@ module Display_Subsystem (
     reg [31:0] r_cached_m, r_cached_n; // 缓存维度
 
     // =========================================================================
-    // 2. 状态机逻辑 (保持原逻辑不变)
+    // 2. 状态机逻辑
     // =========================================================================
 
     // ASCII 常量
@@ -71,8 +77,9 @@ module Display_Subsystem (
     localparam ASC_SPACE = 8'd32;
     localparam ASC_CR    = 8'd13;
     localparam ASC_LF    = 8'd10;
+    localparam ASC_STAR  = 8'd42; // [修正] 补充定义 "*" 的 ASCII 码
 
-    // 状态定义
+    // 状态定义 (ID分配)
     localparam S_IDLE         = 0;
     localparam S_INIT         = 1;
     
@@ -81,17 +88,28 @@ module Display_Subsystem (
     localparam S_LIST_ID_LF   = 3; 
     localparam S_LIST_REQ     = 4; 
     localparam S_LIST_WAIT    = 5; 
-    localparam S_LIST_SEND    = 6; // 在这里写入缓存！
+    localparam S_LIST_SEND    = 6; 
     localparam S_LIST_SEP     = 7; 
     
-    // [新增] 缓存回显模式 (Cache -> UART)
-    localparam S_CACHE_FETCH  = 8; // 从 Cache 拿数据
-    localparam S_CACHE_SEND   = 9; // 发送数据
+    // 缓存回显模式 (Cache -> UART)
+    localparam S_CACHE_FETCH  = 8; 
+    localparam S_CACHE_SEND   = 9; 
     localparam S_CACHE_SEP    = 10;
     
-    localparam S_DONE         = 15;
+    // [修正] 补充定义汇总模式的状态 ID (16-24)
+    localparam S_SUM_TOTAL    = 16;
+    localparam S_SUM_SP1      = 17;
+    localparam S_SUM_CHECK    = 18;
+    localparam S_SUM_M        = 19;
+    localparam S_SUM_STAR1    = 20;
+    localparam S_SUM_N        = 21;
+    localparam S_SUM_STAR2    = 22;
+    localparam S_SUM_CNT      = 23;
+    localparam S_SUM_SP2      = 24;
+
+    localparam S_DONE         = 30; // 调大一点避免冲突
     
-    reg [3:0] state;
+    reg [5:0] state; // [修正] 状态增多，位宽增加到 6 bit (足以容纳30+)
     reg [1:0] mat_idx;      
     reg [31:0] row_cnt, col_cnt;
     reg [1:0] tx_step;      
@@ -110,6 +128,7 @@ module Display_Subsystem (
             mat_idx <= 0; row_cnt <= 0; col_cnt <= 0;
             tx_step <= 0;
             r_cached_m <= 0; r_cached_n <= 0;
+            o_lut_idx_req <= 0; // 复位输出
         end 
         else begin
             // 脉冲复位
@@ -132,7 +151,7 @@ module Display_Subsystem (
                     end
                     else if (w_disp_mode == 2) begin // 汇总模式
                         state <= S_SUM_TOTAL;
-                        // o_lut_idx_req <= 0; // (注意：如需汇总模式，请确保端口和逻辑完整)
+                        o_lut_idx_req <= 0; // [修正] 必须清零，否则无法从头遍历
                     end
                     else if (w_disp_mode == 3) begin // 缓存回显
                         state <= S_CACHE_FETCH;
@@ -140,9 +159,8 @@ module Display_Subsystem (
                     end
                     // Mode 0: 单矩阵显示 
                     else if (w_disp_mode == 0) begin
-                        // 直接跳过 ID 显示，复用请求数据的逻辑
                         state <= S_LIST_REQ;
-                        mat_idx <= 0; // 默认第0个（FSM会保证 base_addr 是正确的起始地址）
+                        mat_idx <= 0; 
                     end
                     else state <= S_DONE; 
                 end
@@ -170,10 +188,8 @@ module Display_Subsystem (
 
                 // 3. 循环检查: 还有没有下一个规格?
                 S_SUM_CHECK: begin
-                    // 这里 o_lut_idx_req 既是计数器也是输出
+                    // 检查计数器是否小于总种类数
                     if (o_lut_idx_req < i_system_types_count) begin
-                        // 还有数据，FSM 会根据 o_lut_idx_req 更新 w_disp_m/n/cnt
-                        // 我们需要等一拍让数据稳定吗？通常不用，如果是组合逻辑
                         state <= S_SUM_M; 
                     end else begin
                         state <= S_DONE; // 遍历完了
@@ -267,7 +283,7 @@ module Display_Subsystem (
                     if (w_tx_ready) begin
                         w_disp_tx_data <= w_storage_rdata[7:0] + ASC_0;
                         w_disp_tx_en <= 1;
-                        // 写入缓存 (Mode 0 也会顺便更新缓存的第0个位置，通常无害)
+                        // 写入缓存
                         mat_cache[(mat_idx * 25) + (row_cnt * w_disp_n) + col_cnt] <= w_storage_rdata;
                         state <= S_LIST_SEP;
                         tx_step <= 0;
@@ -311,8 +327,6 @@ module Display_Subsystem (
                 // ============================================================
                 S_CACHE_FETCH: begin
                     // 1. 从缓存读数据 (组合逻辑读取，无需等待)
-                    // 地址 = (mat_idx * 25) + (row_cnt * n) + col_cnt
-                    // 注意：这里使用 r_cached_n
                     cache_rdata <= mat_cache[(mat_idx * 25) + (row_cnt * r_cached_n) + col_cnt];
                     state <= S_CACHE_SEND;
                 end
