@@ -62,6 +62,7 @@ module Calculator_Core (
 
     // 锁存维度，防止 FSM 在计算中途变化
     reg [31:0] m1, n1, m2, n2;
+    reg [2:0] op;
     reg [31:0] res_m, res_n; // 结果的维度
 
     always @(posedge clk or negedge rst_n) begin
@@ -71,6 +72,10 @@ module Calculator_Core (
             target_cnt<=0;
             o_calc_done<=0;
             o_calc_we<=0;
+            row<=0;
+            col<=0;
+            k<=0;
+            acc_sum<=0;
         end
         else begin
             state<=next_state;
@@ -112,7 +117,7 @@ module Calculator_Core (
                     end
                 end
                 S_CALC: begin
-                    case (i_op_code)
+                    case (op)
                         3'd0: begin
                             if (row<m1) begin
                                 if (col<n1) begin
@@ -248,10 +253,11 @@ module Calculator_Core (
                     next_cnt=0;
                     next_target_cnt=m1*n1;
                     next_state=S_LOAD_A;
-                    if (i_op_code==3'd0) begin
+                    op=i_op_code;
+                    if (op==3'd0) begin
                         res_m=n1;
                         res_n=m1;
-                    end else if (i_op_code==3'd1 or i_op_code==3'd2) begin
+                    end else if (op==3'd1 or op==3'd2) begin
                         res_m=m1;
                         res_n=n1;
                     end else begin
@@ -268,7 +274,7 @@ module Calculator_Core (
             S_LOAD_A: begin
                 if (cnt>=target_cnt) begin
                     next_cnt=0;
-                    if (i_op_code==3'd0 or i_op_code==3'd2) begin
+                    if (op==3'd0 or op==3'd2) begin
                         next_target_cnt=res_m*res_n;
                         next_state=S_CALC;
                     end else begin
