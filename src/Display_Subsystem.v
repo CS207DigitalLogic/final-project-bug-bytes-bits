@@ -41,7 +41,7 @@ module Display_Subsystem (
 
     // 例化 uart_tx
     uart_tx #(
-        .CLK_FREQ(100_000_000), // 请根据你的时钟频率修改
+        .CLK_FREQ(100_000_000), 
         .BAUD_RATE(115200)
     ) u_uart_tx (
         .clk(clk),
@@ -126,27 +126,112 @@ module Display_Subsystem (
                 S_INIT: begin
                     mat_idx <= 0; row_cnt <= 0; col_cnt <= 0; tx_step <= 0;
                     
-                    if (w_disp_mode == 1) begin // 列表模式 (存缓存)
+                    if (w_disp_mode == 1) begin // 列表模式
                         state <= S_LIST_SHOW_ID;
-                        // 锁存维度，供缓存模式使用
-                        r_cached_m <= w_disp_m;
-                        r_cached_n <= w_disp_n;
+                        r_cached_m <= w_disp_m; r_cached_n <= w_disp_n;
                     end
-                    else if (w_disp_mode == 3) begin // 缓存回显模式
+                    else if (w_disp_mode == 2) begin // 汇总模式
+                        state <= S_SUM_TOTAL;
+                        // o_lut_idx_req <= 0; // (注意：如需汇总模式，请确保端口和逻辑完整)
+                    end
+                    else if (w_disp_mode == 3) begin // 缓存回显
                         state <= S_CACHE_FETCH;
-                        // 校验一下 ID 是否合法，防止越界 (默认 ID 1)
-                        if (w_disp_selected_id == 2) mat_idx <= 1; // ID 2 对应 index 1
-                        else mat_idx <= 0;                         // ID 1 对应 index 0
+                        if (w_disp_selected_id == 2) mat_idx <= 1; else mat_idx <= 0;
+                    end
+                    // Mode 0: 单矩阵显示 
+                    else if (w_disp_mode == 0) begin
+                        // 直接跳过 ID 显示，复用请求数据的逻辑
+                        state <= S_LIST_REQ;
+                        mat_idx <= 0; // 默认第0个（FSM会保证 base_addr 是正确的起始地址）
                     end
                     else state <= S_DONE; 
                 end
 
-                // ----------------------------------------------------
-                // 1. 显示编号 (如 "1" + \r\n)
-                // ----------------------------------------------------
+                // ============================================================
+                // 汇总模式逻辑 
+                // ============================================================
+                // 1. 发送总数 
+                S_SUM_TOTAL: begin
+                    if (w_tx_ready) begin
+                        w_disp_tx_data <= i_system_total_count[7:0] + ASC_0;
+                        w_disp_tx_en <= 1;
+                        state <= S_SUM_SP1;
+                    end
+                end
+                
+                // 2. 发送空格 " "
+                S_SUM_SP1: begin
+                    if (w_tx_ready) begin
+                        w_disp_tx_data <= ASC_SPACE;
+                        w_disp_tx_en <= 1;
+                        state <= S_SUM_CHECK;
+                    end
+                end
+
+                // 3. 循环检查: 还有没有下一个规格?
+                S_SUM_CHECK: begin
+                    // 这里 o_lut_idx_req 既是计数器也是输出
+                    if (o_lut_idx_req < i_system_types_count) begin
+                        // 还有数据，FSM 会根据 o_lut_idx_req 更新 w_disp_m/n/cnt
+                        // 我们需要等一拍让数据稳定吗？通常不用，如果是组合逻辑
+                        state <= S_SUM_M; 
+                    end else begin
+                        state <= S_DONE; // 遍历完了
+                    end
+                end
+
+                // 4. 发送序列: M * N * Cnt + Space
+                S_SUM_M: begin
+                    if (w_tx_ready) begin
+                        w_disp_tx_data <= w_disp_m[7:0] + ASC_0; 
+                        w_disp_tx_en <= 1;
+                        state <= S_SUM_STAR1;
+                    end
+                end
+                S_SUM_STAR1: begin
+                    if (w_tx_ready) begin
+                        w_disp_tx_data <= ASC_STAR; 
+                        w_disp_tx_en <= 1;
+                        state <= S_SUM_N;
+                    end
+                end
+                S_SUM_N: begin
+                    if (w_tx_ready) begin
+                        w_disp_tx_data <= w_disp_n[7:0] + ASC_0; 
+                        w_disp_tx_en <= 1;
+                        state <= S_SUM_STAR2;
+                    end
+                end
+                S_SUM_STAR2: begin
+                    if (w_tx_ready) begin
+                        w_disp_tx_data <= ASC_STAR; 
+                        w_disp_tx_en <= 1;
+                        state <= S_SUM_CNT;
+                    end
+                end
+                S_SUM_CNT: begin
+                    if (w_tx_ready) begin
+                        w_disp_tx_data <= {6'b0, w_disp_total_cnt} + ASC_0; 
+                        w_disp_tx_en <= 1;
+                        state <= S_SUM_SP2;
+                    end
+                end
+                S_SUM_SP2: begin
+                    if (w_tx_ready) begin
+                        w_disp_tx_data <= ASC_SPACE; 
+                        w_disp_tx_en <= 1;
+                        // 准备查下一个
+                        o_lut_idx_req <= o_lut_idx_req + 1; 
+                        state <= S_SUM_CHECK;
+                    end
+                end
+
+                // ============================================================
+                // 列表模式 / 单矩阵模式逻辑 
+                // ============================================================
                 S_LIST_SHOW_ID: begin
                     if (w_tx_ready) begin
-                        w_disp_tx_data <= (mat_idx + 1) + ASC_0; // 0->'1', 1->'2'
+                        w_disp_tx_data <= (mat_idx + 1) + ASC_0; 
                         w_disp_tx_en <= 1;
                         state <= S_LIST_ID_LF;
                         tx_step <= 0;
@@ -156,46 +241,33 @@ module Display_Subsystem (
                 S_LIST_ID_LF: begin
                     if (w_tx_ready) begin
                         if (tx_step == 0) begin
-                            w_disp_tx_data <= ASC_CR; // \r
-                            w_disp_tx_en <= 1;
-                            tx_step <= 1;
+                            w_disp_tx_data <= ASC_CR; w_disp_tx_en <= 1; tx_step <= 1;
                         end else begin
-                            w_disp_tx_data <= ASC_LF; // \n
-                            w_disp_tx_en <= 1;
-                            
-                            // 准备开始打印矩阵内容
-                            row_cnt <= 0;
-                            col_cnt <= 0;
+                            w_disp_tx_data <= ASC_LF; w_disp_tx_en <= 1;
+                            row_cnt <= 0; col_cnt <= 0;
                             state <= S_LIST_REQ;
                         end
                     end
                 end
 
-                // ----------------------------------------------------
-                // 2. 读取并显示矩阵内容 (m*n)
-                // ----------------------------------------------------
                 S_LIST_REQ: begin
-                    // 计算物理地址: Base + (矩阵偏移) + (行偏移) + 列偏移
-                    // 矩阵偏移 = mat_idx * (m * n)
+                    // 地址计算：Base + (idx * m * n) + (row * n) + col
                     w_disp_req_addr <= w_disp_base_addr + 
                                        (mat_idx * w_disp_m * w_disp_n) + 
                                        (row_cnt * w_disp_n) + 
                                        col_cnt;
-                    
                     state <= S_LIST_WAIT;
                 end
 
                 S_LIST_WAIT: begin
-                    // 等待 RAM 数据读出
                     state <= S_LIST_SEND;
                 end
 
                 S_LIST_SEND: begin
                     if (w_tx_ready) begin
-                        // 将读到的二进制数转 ASCII 发送
                         w_disp_tx_data <= w_storage_rdata[7:0] + ASC_0;
                         w_disp_tx_en <= 1;
-                        //写入缓存
+                        // 写入缓存 (Mode 0 也会顺便更新缓存的第0个位置，通常无害)
                         mat_cache[(mat_idx * 25) + (row_cnt * w_disp_n) + col_cnt] <= w_storage_rdata;
                         state <= S_LIST_SEP;
                         tx_step <= 0;
@@ -204,41 +276,32 @@ module Display_Subsystem (
 
                 S_LIST_SEP: begin
                     if (w_tx_ready) begin
-                        // 判断是行末还是中间
                         if (col_cnt == w_disp_n - 1) begin
-                            // 行末：发送 \r\n
+                            // 行末换行
                             if (tx_step == 0) begin
-                                w_disp_tx_data <= ASC_CR;
-                                w_disp_tx_en <= 1;
-                                tx_step <= 1;
+                                w_disp_tx_data <= ASC_CR; w_disp_tx_en <= 1; tx_step <= 1;
                             end else begin
-                                w_disp_tx_data <= ASC_LF;
-                                w_disp_tx_en <= 1;
-                                // 换行处理
+                                w_disp_tx_data <= ASC_LF; w_disp_tx_en <= 1;
                                 col_cnt <= 0;
-                                
-                                // 检查矩阵是否结束
                                 if (row_cnt == w_disp_m - 1) begin
-                                    // 当前矩阵打印完毕
+                                    // 矩阵结束
                                     mat_idx <= mat_idx + 1;
-                                    // 检查是否有下一个矩阵
+                                    // 检查是否还有下一个 (对于 Mode 0，total_cnt 应为 1，这里直接不成立跳转 DONE)
                                     if (mat_idx + 1 < w_disp_total_cnt) begin
-                                        state <= S_LIST_SHOW_ID; // 循环，显示下一个ID
+                                        state <= S_LIST_SHOW_ID; 
                                     end else begin
-                                        state <= S_DONE; // 全部结束
+                                        state <= S_DONE; 
                                     end
                                 end else begin
                                     row_cnt <= row_cnt + 1;
-                                    state <= S_LIST_REQ; // 继续打印下一行
+                                    state <= S_LIST_REQ; 
                                 end
                             end
-                        end 
-                        else begin
-                            // 行中：发送空格
-                            w_disp_tx_data <= ASC_SPACE;
-                            w_disp_tx_en <= 1;
+                        end else begin
+                            // 行中空格
+                            w_disp_tx_data <= ASC_SPACE; w_disp_tx_en <= 1;
                             col_cnt <= col_cnt + 1;
-                            state <= S_LIST_REQ; // 继续打印下一个数
+                            state <= S_LIST_REQ; 
                         end
                     end
                 end
