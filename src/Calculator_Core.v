@@ -4,7 +4,7 @@ module Calculator_Core (
 
     // --- FSM 控制接口 ---
     input wire i_start_calc,        // 开始计算脉冲
-    input wire [2:0] i_op_code,     // 操作码: 000=转置, 001=加法, 010=乘法, etc.
+    input wire [2:0] i_op_code,     // 操作码: 000=转置, 001=加法, 010=标量乘法, 011=乘法, etc.
     output reg o_calc_done,         // 计算完成信号
 
     // --- 操作数参数 (来自 FSM) ---
@@ -14,7 +14,7 @@ module Calculator_Core (
     input wire [31:0] i_op1_n,      // 列数
     // 操作数 2
     input wire [7:0]  i_op2_addr,
-    input wire [31:0] i_op2_m,
+    input wire [31:0] i_op2_m,      // 标量乘法下为标量
     input wire [31:0] i_op2_n,
     // 结果存放位置
     input wire [7:0]  i_res_addr,   
@@ -46,7 +46,7 @@ module Calculator_Core (
     localparam S_WRITE     = 4; // 写回结果
     localparam S_DONE      = 5;
 
-    reg [3:0] state;
+    reg [3:0] state, next_state;
 
     // =========================================================
     // 3. 计数器与辅助变量
@@ -61,5 +61,71 @@ module Calculator_Core (
     // 锁存维度，防止 FSM 在计算中途变化
     reg [31:0] m1, n1, m2, n2;
     reg [31:0] res_m, res_n; // 结果的维度
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state<=S_IDLE;
+        end
+        else begin
+            state<=next_state;
+        end
+    end
+
+    always @(*) begin
+        case(state)
+            S_IDLE: begin
+               if (i_start_calc) begin
+                    m1=i_op1_m;
+                    n1=i_op1_n;
+                    m2=i_op2_m;
+                    n2=i_op2_n;
+                    cnt=0;
+                    target_cnt=m1*n1;
+                    next_state=S_LOAD_A;
+               end
+               else begin
+                    next_state=S_IDLE;
+               end
+            end
+            S_LOAD_A: begin
+                if (cnt>=target_cnt) begin
+                    cnt=0;
+                    if (i_op_code==3'd0 or i_op_code==3'd2) begin
+                        row=0;
+                        col=0;
+                        k=0;
+                        acc_sum=0;
+                        next_state=CALC;
+                    end else begin
+                        target_cnt=m2*n2;
+                        next_state=S_LOAD_B;
+                    end
+                end else begin
+                    next_state=S_LOAD_A;
+                end
+            end
+            S_LOAD_B: begin
+                if (cnt>=target_cnt) begin
+                    cnt=0;
+                    row=0;
+                    col=0;
+                    k=0;
+                    acc_sum=0;
+                    next_state=CALC;
+                end else begin
+                    next_state=S_LOAD_B;
+                end
+            end
+            S_CALC: begin
+
+            end
+            S_WRITE: begin
+
+            end
+            S_DONE: begin
+                
+            end
+        endcase
+    end
 
 endmodule
