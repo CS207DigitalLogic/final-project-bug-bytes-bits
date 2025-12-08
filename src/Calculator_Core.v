@@ -40,11 +40,12 @@ module Calculator_Core (
     // 2. 状态机定义
     // =========================================================
     localparam S_IDLE      = 0;
-    localparam S_LOAD_A    = 1; // 加载矩阵 A
-    localparam S_LOAD_B    = 2; // 加载矩阵 B
-    localparam S_CALC      = 3; // 执行计算
-    localparam S_WRITE     = 4; // 写回结果
-    localparam S_DONE      = 5;
+    localparam S_INIT      = 1;
+    localparam S_LOAD_A    = 2; // 加载矩阵 A
+    localparam S_LOAD_B    = 3; // 加载矩阵 B
+    localparam S_CALC      = 4; // 执行计算
+    localparam S_WRITE     = 5; // 写回结果
+    localparam S_DONE      = 6;
 
     reg [3:0] state, next_state;
 
@@ -91,6 +92,23 @@ module Calculator_Core (
                     acc_sum<=0;
                     cnt<=0;
                     target_cnt<=0;
+                end
+                S_INIT: begin
+                    m1<=i_op1_m;
+                    n1<=i_op1_n;
+                    m2<=i_op2_m;
+                    n2<=i_op2_n;
+                    op<=i_op_code;
+                    if (i_op_code==3'd0) begin
+                        res_m<=i_op1_n;
+                        res_n<=i_op1_m;
+                    end else if (i_op_code==3'd1 or i_op_code==3'd2) begin
+                        res_m<=i_op1_m;
+                        res_n<=i_op1_n;
+                    end else begin
+                        res_m<=i_op1_m;
+                        res_n<=i_op2_n;
+                    end
                 end
                 S_LOAD_A: begin
                     row<=0;
@@ -166,7 +184,7 @@ module Calculator_Core (
                             if (row<m1) begin
                                 if (col<n2) begin
                                     if (k<n1) begin
-                                        acc_sum<=acc_sum+mem_a[row*n1+k]*mem_b[k*m2+col];
+                                        acc_sum<=acc_sum+mem_a[row*n1+k]*mem_b[k*n2+col];
                                         k<=k+1;
                                     end else begin
                                         k<=0;
@@ -187,7 +205,7 @@ module Calculator_Core (
                             if (row<m1) begin
                                 if (col<n2) begin
                                     if (k<n1) begin
-                                        acc_sum<=acc_sum+mem_a[row*n1+k]*mem_b[k*m2+col];
+                                        acc_sum<=acc_sum+mem_a[row*n1+k]*mem_b[k*n2+col];
                                         k<=k+1;
                                     end else begin
                                         k<=0;
@@ -246,30 +264,20 @@ module Calculator_Core (
         case(state)
             S_IDLE: begin
                if (i_start_calc) begin
-                    m1=i_op1_m;
-                    n1=i_op1_n;
-                    m2=i_op2_m;
-                    n2=i_op2_n;
+                    next_state=S_INIT;
                     next_cnt=0;
-                    next_target_cnt=m1*n1;
-                    next_state=S_LOAD_A;
-                    op=i_op_code;
-                    if (op==3'd0) begin
-                        res_m=n1;
-                        res_n=m1;
-                    end else if (op==3'd1 or op==3'd2) begin
-                        res_m=m1;
-                        res_n=n1;
-                    end else begin
-                        res_m=m1;
-                        res_n=n2;
-                    end
+                    next_target_cnt=0;
                end
                else begin
                     next_state=S_IDLE;
                     next_cnt=cnt;
                     next_target_cnt=target_cnt;
                end
+            end
+            S_INIT: begin
+                next_cnt=0;
+                next_target_cnt=i_op1_m*i_op1_n;
+                next_state=S_LOAD_A;
             end
             S_LOAD_A: begin
                 if (cnt>=target_cnt) begin
