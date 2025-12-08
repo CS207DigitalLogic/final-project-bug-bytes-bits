@@ -16,7 +16,7 @@ module FSM_Controller (
     input wire [31:0] i_dim_m,// Input: 矩阵行数
     input wire [31:0] i_dim_n,// Input: 矩阵列数
     input wire w_rx_done,     // Input: 任务完成
-    input wire w_error_flag,  // Input: 出错
+    input wire w_error_flag,  // Input: 出错标志 (用于驱动 LED)
     
     // Input 接口 (ID模式)
     input wire [31:0] i_input_id_val, // Input: 读取到的ID (1或2)
@@ -42,7 +42,7 @@ module FSM_Controller (
     output reg [31:0] w_disp_n,       // 维度 N
     output reg [1:0] w_disp_selected_id, // 告诉 Display 回显第几个缓存 (1或2)
     
-    // [新增] 输出给 Display 的统计信息 (确保 Mode 2 正常工作)
+    // 输出给 Display 的统计信息 (确保 Mode 2 正常工作)
     output wire [7:0] w_system_total_count, 
     output wire [2:0] w_system_types_count,
 
@@ -57,6 +57,13 @@ module FSM_Controller (
     output reg [2:0] w_op_code,   // 运算类型
     output reg [7:0] w_op1_addr,  // 操作数1地址
     output reg [7:0] w_op2_addr,  // 操作数2地址
+    
+    // 【核心修复】补充缺失的维度信号，否则计算器无法工作
+    output reg [31:0] w_op1_m,
+    output reg [31:0] w_op1_n,
+    output reg [31:0] w_op2_m,
+    output reg [31:0] w_op2_n,
+    
     output reg [7:0] w_res_addr,  // 结果存放地址 (需要FSM分配)
     
     // 调试端口
@@ -80,6 +87,7 @@ module FSM_Controller (
     localparam S_CALC_SHOW_MAT     = 4'd9; // 回显确认
     localparam S_CALC_EXECUTE      = 4'd10; // 执行计算 & 登记
     localparam S_CALC_RES_SHOW     = 4'd11;// 结果展示
+    
     // 主菜单-展示模式专用状态
     localparam S_MENU_DISP_GET_DIM = 4'd12;
     localparam S_MENU_DISP_FILTER  = 4'd13;
@@ -125,8 +133,6 @@ module FSM_Controller (
     reg btn_d0, btn_d1;
     wire btn_confirm_pose;
     assign btn_confirm_pose = btn_d0 & ~btn_d1;
-
-
 
     // =========================================================================
     // 0. 辅助组合逻辑 (MMU查表 & Display Mux & 统计)
@@ -316,6 +322,11 @@ module FSM_Controller (
             r_res_m <= 0; r_res_n <= 0;
             led <= 0;
             
+            // 计算器参数复位 [新增]
+            w_op1_addr <= 0; w_op2_addr <= 0; w_res_addr <= 0;
+            w_op1_m <= 0; w_op1_n <= 0;
+            w_op2_m <= 0; w_op2_n <= 0;
+            
             // 中间变量复位
             btn_d0 <= 0; btn_d1 <= 0;
         end 
@@ -323,9 +334,6 @@ module FSM_Controller (
             // 默认值 (脉冲信号自动拉低)
             w_addr_ready <= 0; 
             w_start_calc <= 0;
-            // 保持 enable 信号直到状态改变，或者在状态内手动拉低
-            // 这里遵循原逻辑：状态内赋值，离开状态后在 default 或新状态被覆盖
-            // 但为安全起见，我们根据 current_state 显式控制
 
             // 按键消抖
             btn_d0 <= btn[0];
@@ -335,13 +343,19 @@ module FSM_Controller (
                 S_IDLE: begin
                     w_en_input <= 0; 
                     w_en_display <= 0;
-                    led <= 8'b0000_0001;
+                    led <= 8'b0000_0001; // 待机灯
                 end
 
                 S_INPUT_MODE, S_GEN_MODE: begin
                     w_en_input <= 1;
                     w_task_mode <= 0;
                     w_is_gen_mode <= (current_state == S_GEN_MODE);
+                    
+                    // [新增] LED 错误映射逻辑
+                    if (w_error_flag) 
+                        led <= 8'b1000_0001; // 报错红灯
+                    else 
+                        led <= 8'b0000_0001; // 正常
                     
                     // MMU 动态分配逻辑
                     if (w_dims_valid && !w_addr_ready) begin
@@ -436,12 +450,22 @@ module FSM_Controller (
                     if (w_id_valid) begin
                         if (i_input_id_val > 0 && i_input_id_val <= lut_valid_cnt[r_hit_type_idx]) begin
                             r_selected_id <= i_input_id_val[1:0];
+                            
+                            // [核心修复] 在选中操作数时，将维度和地址同时锁存到输出端口
                             if (r_stage == 0) begin
                                 w_op1_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
+                                w_op1_m <= lut_m[r_hit_type_idx];
+                                w_op1_n <= lut_n[r_hit_type_idx];
+                                
+                                // 内部更新
                                 r_op1_m <= i_dim_m;
                                 r_op1_n <= i_dim_n;
                             end else begin
                                 w_op2_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
+                                w_op2_m <= lut_m[r_hit_type_idx];
+                                w_op2_n <= lut_n[r_hit_type_idx];
+                                
+                                // 内部更新
                                 r_op2_m <= i_dim_m;
                                 r_op2_n <= i_dim_n;
                             end
