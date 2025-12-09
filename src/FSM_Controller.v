@@ -58,7 +58,7 @@ module FSM_Controller (
     output reg [7:0] w_op1_addr,  // 操作数1地址
     output reg [7:0] w_op2_addr,  // 操作数2地址
     
-    // 【核心修复】补充缺失的维度信号，否则计算器无法工作
+    // 补充缺失的维度信号，否则计算器无法工作
     output reg [31:0] w_op1_m,
     output reg [31:0] w_op1_n,
     output reg [31:0] w_op2_m,
@@ -351,7 +351,7 @@ module FSM_Controller (
                     w_task_mode <= 0;
                     w_is_gen_mode <= (current_state == S_GEN_MODE);
                     
-                    // [新增] LED 错误映射逻辑
+                    // LED 错误映射逻辑
                     if (w_error_flag) 
                         led <= 8'b1000_0001; // 报错红灯
                     else 
@@ -451,7 +451,7 @@ module FSM_Controller (
                         if (i_input_id_val > 0 && i_input_id_val <= lut_valid_cnt[r_hit_type_idx]) begin
                             r_selected_id <= i_input_id_val[1:0];
                             
-                            // [核心修复] 在选中操作数时，将维度和地址同时锁存到输出端口
+                            // 在选中操作数时，将维度和地址同时锁存到输出端口
                             if (r_stage == 0) begin
                                 w_op1_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
                                 w_op1_m <= lut_m[r_hit_type_idx];

@@ -16,7 +16,7 @@ module Display_Subsystem (
     // 缓存回显时的选择 ID (1 或 2)
     input wire [1:0]  w_disp_selected_id,
 
-    // [新增] 汇总模式接口
+    // 汇总模式接口
     input wire [7:0] i_system_total_count, // 系统总共有多少个矩阵
     input wire [2:0] i_system_types_count, // 系统总共有几种规格
     output reg [1:0] o_lut_idx_req,        // 告诉 FSM 我现在想看第几个规格的数据

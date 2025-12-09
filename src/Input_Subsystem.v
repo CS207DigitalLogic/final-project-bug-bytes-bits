@@ -140,9 +140,9 @@ module Input_Subsystem (
                 if (rx_pulse) begin
                     if (is_delimiter) begin
                         if (current_value >= 1 && current_value <= 2) next_state = S_WAIT_ADDR;
-                        else next_state = S_RX_M; // [修改] 数量错误 -> 回到起点
+                        else next_state = S_RX_M; // 数量错误 -> 回到起点
                     end
-                    else if (!is_digit) next_state = S_RX_M; // [修改] 非法字符 -> 回到起点
+                    else if (!is_digit) next_state = S_RX_M; // 非法字符 -> 回到起点
                 end
             end
 
