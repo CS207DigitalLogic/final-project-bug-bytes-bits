@@ -23,7 +23,7 @@ module Seg7_Driver (
     localparam SEG_C = 8'h9C; 
     localparam SEG_E = 8'h9E; 
     
-    reg [7:0] SEG_NUM [0:9];
+    /*reg [7:0] SEG_NUM [0:9];
     initial begin
         SEG_NUM[0] = 8'hFC;
         SEG_NUM[1] = 8'h60;
@@ -35,8 +35,12 @@ module Seg7_Driver (
         SEG_NUM[7] = 8'hE0;
         SEG_NUM[8] = 8'hFE;
         SEG_NUM[9] = 8'hF6;
-    end
-    //parameter [7:0] SEG_NUM[0:9]={8'hFC, 8'h60, 8'hDA, 8'hF2, 8'h66, 8'hB6, 8'hBE, 8'hE0, 8'hFE, 8'hF6};
+    end*/
+    //localparam [7:0] SEG_NUM[0:9]={8'hFC, 8'h60, 8'hDA, 8'hF2, 8'h66, 8'hB6, 8'hBE, 8'hE0, 8'hFE, 8'hF6};
+    localparam [7:0] SEG_NUM[0:9] = '{
+        8'hFC, 8'h60, 8'hDA, 8'hF2, 8'h66, 
+        8'hB6, 8'hBE, 8'hE0, 8'hFE, 8'hF6
+    };
 
     reg [14:0] cnt;
     reg [1:0] scan_cnt;
