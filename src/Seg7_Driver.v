@@ -37,10 +37,24 @@ module Seg7_Driver (
         SEG_NUM[9] = 8'hF6;
     end*/
     //localparam [7:0] SEG_NUM[0:9]={8'hFC, 8'h60, 8'hDA, 8'hF2, 8'h66, 8'hB6, 8'hBE, 8'hE0, 8'hFE, 8'hF6};
-    localparam [7:0] SEG_NUM[0:9] = '{
-        8'hFC, 8'h60, 8'hDA, 8'hF2, 8'h66, 
-        8'hB6, 8'hBE, 8'hE0, 8'hFE, 8'hF6
-    };
+    function [7:0] get_seg_code;
+        input [3:0] num;
+        begin
+            case(num)
+                4'd0: get_seg_code = 8'hFC;
+                4'd1: get_seg_code = 8'h60;
+                4'd2: get_seg_code = 8'hDA;
+                4'd3: get_seg_code = 8'hF2;
+                4'd4: get_seg_code = 8'h66;
+                4'd5: get_seg_code = 8'hB6;
+                4'd6: get_seg_code = 8'hBE;
+                4'd7: get_seg_code = 8'hE0;
+                4'd8: get_seg_code = 8'hFE;
+                4'd9: get_seg_code = 8'hF6;
+                default: get_seg_code = 8'h00;
+            endcase
+        end
+    endfunction
 
     reg [14:0] cnt;
     reg [1:0] scan_cnt;
@@ -83,10 +97,10 @@ module Seg7_Driver (
             endcase
         end else begin
             if (i_digit_val>=10) begin
-                decode_out[0]=SEG_NUM[i_digit_val-10];
-                decode_out[1]=SEG_NUM[1];
+                decode_out[0]=get_seg_code(i_digit_val - 10);
+                decode_out[1]=get_seg_code(4'd1);
             end else begin
-                decode_out[0]=SEG_NUM[i_digit_val];
+                decode_out[0]=get_seg_code(i_digit_val);
                 decode_out[1]=SEG_OFF;
             end
             decode_out[2]=SEG_OFF;
