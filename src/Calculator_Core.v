@@ -102,7 +102,7 @@ module Calculator_Core (
                     if (i_op_code==3'd0) begin
                         res_m<=i_op1_n;
                         res_n<=i_op1_m;
-                    end else if (i_op_code==3'd1 or i_op_code==3'd2) begin
+                    end else if (i_op_code==3'd1 || i_op_code==3'd2) begin
                         res_m<=i_op1_m;
                         res_n<=i_op1_n;
                     end else begin
@@ -282,7 +282,7 @@ module Calculator_Core (
             S_LOAD_A: begin
                 if (cnt>=target_cnt) begin
                     next_cnt=0;
-                    if (op==3'd0 or op==3'd2) begin
+                    if (op==3'd0 || op==3'd2) begin
                         next_target_cnt=res_m*res_n;
                         next_state=S_CALC;
                     end else begin
