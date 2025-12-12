@@ -170,7 +170,7 @@ module Input_Subsystem (
             end
 
             S_GEN_FILL: begin
-                if (w_input_addr >= expected_count) begin
+                if (w_input_addr >= expected_count-1) begin
                     if (gen_curr_cnt + 1 < gen_total_mats) next_state = S_WAIT_ADDR;
                     else next_state = S_DONE;
                 end
@@ -280,8 +280,13 @@ module Input_Subsystem (
                 end
 
                 S_WAIT_ADDR: begin
-                    w_dims_valid <= 1; 
-                    if (w_addr_ready) w_input_addr <= 0; 
+                    // 看到 Ready 就立刻撤销 Valid
+                    if (w_addr_ready) begin
+                        w_dims_valid <= 0; // 撤销请求
+                        w_input_addr <= 0; 
+                    end else begin
+                        w_dims_valid <= 1; // 维持请求
+                    end
                 end
 
                 S_PRE_CLEAR: begin //预先清零
