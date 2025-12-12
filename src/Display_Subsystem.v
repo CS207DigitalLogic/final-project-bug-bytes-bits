@@ -43,7 +43,7 @@ module Display_Subsystem (
 
     // 状态机使用的 "Ready" 信号 (不忙即为 Ready)
     wire w_tx_ready;
-    assign w_tx_ready = ~tx_busy;
+    assign w_tx_ready = ~tx_busy & ~w_disp_tx_en;
 
     // 例化 uart_tx
     uart_tx #(
@@ -204,7 +204,12 @@ module Display_Subsystem (
                                 end
                            end
 
-            S_DONE: next_state = S_IDLE;
+            S_DONE: begin
+                if (!w_en_display) 
+                    next_state = S_IDLE; // 只有看到 FSM 撤销了使能，才回空闲
+                else 
+                    next_state = S_DONE; // 否则在这里等待，维持 done 信号
+            end
             default: next_state = S_IDLE;
         endcase
     end
