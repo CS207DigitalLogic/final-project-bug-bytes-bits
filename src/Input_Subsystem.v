@@ -2,28 +2,28 @@ module Input_Subsystem (
     input wire clk, 
     input wire rst_n, 
     input wire uart_rx, 
-    input wire w_en_input,
+    input wire w_en_input, //FSM说准备工作
     // FSM 交互接口
-    input wire [7:0] w_base_addr,      
-    input wire w_addr_ready,           
-    input wire w_is_gen_mode,          
+    input wire [7:0] w_base_addr,//FSM给的基地址      
+    input wire w_addr_ready, //FSM告诉地址准备好了，可以读取了          
+    input wire w_is_gen_mode, //FSM控制的模式选择         
 
     // 任务模式控制
-    input wire [1:0] w_task_mode, 
+    input wire [1:0] w_task_mode, //0:手动输入和生成模式 1:矩阵维度选择 2:矩阵编号选择
 
-    output reg w_input_we,
-    output wire [7:0] w_real_addr, 
-    output reg [31:0] w_input_data,
-    output reg w_rx_done,         
-    output reg w_error_flag,      
+    output reg w_input_we, //控制MUX使能的
+    output wire [7:0] w_real_addr, //给MUX的
+    output reg [31:0] w_input_data, //给MUX的
+    output reg w_rx_done, //告诉FSM全读完了        
+    output reg w_error_flag, //告诉FSM有错      
     
     // 握手接口
-    output wire [31:0] w_dim_m, 
+    output wire [31:0] w_dim_m, //给FSM让它查表给基地址的
     output wire [31:0] w_dim_n,
-    output reg w_dims_valid,      
+    output reg w_dims_valid, //告诉FSM维度合不合法     
     
     // ID 读取接口
-    output reg [31:0] w_input_id_val,
+    output reg [31:0] w_input_id_val, //给出编号信息
     output reg w_id_valid         
 );
 
@@ -72,12 +72,12 @@ module Input_Subsystem (
     assign is_digit = (rx_data >= ASC_0 && rx_data <= ASC_0+9);
     assign is_delimiter = (rx_data == ASC_SPACE || rx_data == ASC_CR || rx_data == ASC_LF);
     
-    assign w_real_addr = w_input_addr + w_base_addr;
+    assign w_real_addr = w_input_addr + w_base_addr;//这是对应寄存器的真实地址
     assign w_dim_m = reg_m;
     assign w_dim_n = reg_n;
     
     assign random_val = lfsr_reg[3:0] % 10;
-    always @(posedge clk) begin
+    always @(posedge clk) begin //伪随机数生成
         if (!rst_n) lfsr_reg <= 32'hACE1;
         else lfsr_reg <= {lfsr_reg[30:0], lfsr_reg[31] ^ lfsr_reg[21] ^ lfsr_reg[1]};
     end
@@ -106,13 +106,13 @@ module Input_Subsystem (
     // Stage 2: 次态逻辑 
     // =========================================================================
     always @(*) begin
-        next_state = state; 
+        next_state = state; //在完成某个state的任务前默认保持
 
         case (state)
             S_RX_M: begin
                 if (rx_pulse) begin
                     if (is_delimiter) begin
-                        if (w_task_mode == 2) next_state = S_DONE; 
+                        if (w_task_mode == 2) next_state = S_DONE; //矩阵编号选择的接收
                         // 如果数值非法，保持在 S_RX_M 
                         else if (current_value >= 1 && current_value <= 5) next_state = S_RX_N;
                     end
@@ -127,7 +127,7 @@ module Input_Subsystem (
                     if (is_delimiter) begin
                         if (current_value >= 1 && current_value <= 5) begin
                             if (w_task_mode == 1) next_state = S_DONE; 
-                            else if (w_is_gen_mode) next_state = S_RX_COUNT;
+                            else if (w_is_gen_mode) next_state = S_RX_COUNT; //生成模式读取需要生成的矩阵数目
                             else next_state = S_WAIT_ADDR;
                         end
                         else next_state = S_RX_M; // 维度N错误 -> 回到起点
@@ -154,7 +154,7 @@ module Input_Subsystem (
             end
 
             S_PRE_CLEAR: begin
-                if (w_input_addr >= expected_count) next_state = S_USER_INPUT; 
+                if (w_input_addr >= expected_count-1) next_state = S_USER_INPUT; 
             end
 
             S_USER_INPUT: begin
@@ -199,6 +199,8 @@ module Input_Subsystem (
             w_dims_valid <= 0;     
             w_id_valid <= 0;
             w_rx_done <= 0;
+
+            if (w_input_we) w_input_addr <= w_input_addr + 1;//调了一个bug，把地址更新逻辑调成全局，只有上一拍w_input_we是1才更新，避免第一个地址就是1
 
             if (state != S_USER_INPUT || rx_pulse) timeout_cnt <= 0;
             else if (state == S_USER_INPUT && timeout_cnt < TIMEOUT_VAL) timeout_cnt <= timeout_cnt + 1;
@@ -282,11 +284,10 @@ module Input_Subsystem (
                     if (w_addr_ready) w_input_addr <= 0; 
                 end
 
-                S_PRE_CLEAR: begin
-                    if (w_input_addr < expected_count) begin
+                S_PRE_CLEAR: begin //预先清零
+                    if (w_input_addr < expected_count-1) begin//这里用一个魔数，因为不用的话会多清一个0
                         w_input_we <= 1;
                         w_input_data <= 0;
-                        w_input_addr <= w_input_addr + 1;
                     end else begin
                         w_input_addr <= 0; 
                     end
@@ -310,7 +311,6 @@ module Input_Subsystem (
                             else if (w_input_addr < expected_count) begin
                                 w_input_data <= current_value;
                                 w_input_we <= 1;
-                                w_input_addr <= w_input_addr + 1;
                                 current_value <= 0;
                             end
                         end
@@ -322,10 +322,9 @@ module Input_Subsystem (
                 end
 
                 S_GEN_FILL: begin
-                    if (w_input_addr < expected_count) begin
+                    if (w_input_addr < expected_count -1) begin
                         w_input_we <= 1;
                         w_input_data <= random_val;
-                        w_input_addr <= w_input_addr + 1;
                     end else begin
                         gen_curr_cnt <= gen_curr_cnt + 1;
                     end
