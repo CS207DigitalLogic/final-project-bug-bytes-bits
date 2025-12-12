@@ -115,24 +115,28 @@ module Calculator_Core (
                     col<=0;
                     k<=0;
                     acc_sum<=0;
+                    if (cnt>0) begin
+                        mem_a[cnt-1]<=i_storage_rdata;
+                    end
                     if (cnt<target_cnt) begin
                         o_calc_req_addr<=i_op1_addr+cnt;
-                        //cnt<=cnt+1;
-                    end else begin
-                        //cnt<=cnt;
                     end
+                    if (cnt==target_cnt)
+                        mem_a[cnt-1]<=i_storage_rdata;
                 end
                 S_LOAD_B: begin
                     row<=0;
                     col<=0;
                     k<=0;
                     acc_sum<=0;
+                    if (cnt>0) begin
+                        mem_b[cnt-1]<=i_storage_rdata;
+                    end
                     if (cnt<target_cnt) begin
                         o_calc_req_addr<=i_op2_addr+cnt;
-                        //cnt<=cnt+1;
-                    end else begin
-                        //cnt<=cnt;
                     end
+                    if (cnt==target_cnt)
+                        mem_b[cnt-1]<=i_storage_rdata;
                 end
                 S_CALC: begin
                     case (op)
@@ -325,28 +329,5 @@ module Calculator_Core (
                 next_state=S_IDLE;
             end
         endcase
-    end
-    
-    reg [3:0] state1, state2;
-    reg [7:0] cap_addr1, cap_addr2;
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            state1<=0;
-            state2<=0;
-            cap_addr1<=0;
-            cap_addr2<=0;
-        end else begin
-            state2<=state1;
-            state1<=state;
-            cap_addr2<=cap_addr1;
-            cap_addr1<=o_calc_req_addr;
-            if (state1==S_LOAD_A) begin // 1 or 2
-                mem_a[cap_addr1-i_op1_addr]<=i_storage_rdata;
-            end else if (state1==S_LOAD_B) begin
-                mem_b[cap_addr1-i_op2_addr]<=i_storage_rdata;
-            end else begin
-            end
-        end
     end
 endmodule
