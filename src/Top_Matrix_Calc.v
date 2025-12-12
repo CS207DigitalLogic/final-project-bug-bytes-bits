@@ -37,7 +37,7 @@ module Top_Module (
     wire [31:0] w_op1_m, w_op1_n, w_op2_m, w_op2_n;
     
     // FSM 状态调试信号 (用于控制数码管和定时器)
-    wire [3:0] w_state; 
+    wire [4:0] w_state; 
 
     // --- Input Subsystem 信号 ---
     wire w_input_rx_done;
