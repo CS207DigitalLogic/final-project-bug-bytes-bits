@@ -117,9 +117,9 @@ module Calculator_Core (
                     acc_sum<=0;
                     if (cnt<target_cnt) begin
                         o_calc_req_addr<=i_op1_addr+cnt;
-                        cnt<=cnt+1;
+                        //cnt<=cnt+1;
                     end else begin
-                        cnt<=cnt;
+                        //cnt<=cnt;
                     end
                 end
                 S_LOAD_B: begin
@@ -129,9 +129,9 @@ module Calculator_Core (
                     acc_sum<=0;
                     if (cnt<target_cnt) begin
                         o_calc_req_addr<=i_op2_addr+cnt;
-                        cnt<=cnt+1;
+                        //cnt<=cnt+1;
                     end else begin
-                        cnt<=cnt;
+                        //cnt<=cnt;
                     end
                 end
                 S_CALC: begin
@@ -140,44 +140,36 @@ module Calculator_Core (
                             if (row<m1) begin
                                 if (col<n1) begin
                                     mem_res[col*res_n+row]<=mem_a[row*n1+col];
-                                    cnt<=cnt+1;
                                     col<=col+1;
                                 end else begin
                                     col<=0;
-                                    cnt<=cnt;
                                     row<=row+1;
                                 end
                             end else begin
-                                cnt<=cnt;
                             end
                         end
                         3'd1: begin
                             if (row<m1) begin
                                 if (col<n1) begin
                                     mem_res[row*n1+col]<=mem_a[row*n1+col]+mem_b[row*n1+col];
-                                    cnt<=cnt+1;
                                     col<=col+1;
                                 end else begin
                                     col<=0;
-                                    cnt<=cnt;
                                     row<=row+1;
                                 end
                             end else begin
-                                cnt<=cnt;
                             end
                         end
                         3'd2: begin
                             if (row<m1) begin
                                 if (col<n1) begin
                                     mem_res[row*n1+col]<=mem_a[row*n1+col]*m2;
-                                    cnt<=cnt+1;
                                     col<=col+1;
                                 end else begin
                                     col<=0;
                                     row<=row+1;
                                 end
                             end else begin
-                                cnt<=cnt;
                             end
                         end
                         3'd3: begin
@@ -190,7 +182,6 @@ module Calculator_Core (
                                         k<=0;
                                         mem_res[row*n2+col]<=acc_sum;
                                         acc_sum<=0;
-                                        cnt<=cnt+1;
                                         col<=col+1;
                                     end
                                 end else begin
@@ -198,7 +189,6 @@ module Calculator_Core (
                                     row<=row+1;
                                 end
                             end else begin
-                                cnt<=cnt;
                             end
                         end
                         default: begin //默认矩阵乘法
@@ -211,7 +201,6 @@ module Calculator_Core (
                                         k<=0;
                                         mem_res[row*n2+col]<=acc_sum;
                                         acc_sum<=0;
-                                        cnt<=cnt+1;
                                         col<=col+1;
                                     end
                                 end else begin
@@ -219,7 +208,6 @@ module Calculator_Core (
                                     row<=row+1;
                                 end
                             end else begin
-                                cnt<=cnt;
                             end
                         end
                     endcase
@@ -233,9 +221,7 @@ module Calculator_Core (
                         o_calc_we<=1;
                         o_calc_waddr<=i_res_addr+cnt;
                         o_calc_wdata<=mem_res[cnt];
-                        cnt<=cnt+1;
                     end else begin
-                        cnt<=cnt;
                     end
                 end
                 S_DONE: begin
@@ -292,7 +278,7 @@ module Calculator_Core (
                 end else begin
                     next_target_cnt=target_cnt;
                     next_state=S_LOAD_A;
-                    next_cnt=cnt;
+                    next_cnt=cnt+1;
                 end
             end
             S_LOAD_B: begin
@@ -303,11 +289,11 @@ module Calculator_Core (
                 end else begin
                     next_target_cnt=target_cnt;
                     next_state=S_LOAD_B;
-                    next_cnt=cnt;
+                    next_cnt=cnt+1;
                 end
             end
             S_CALC: begin
-                if (cnt>=target_cnt) begin
+                if (row>=m1) begin
                     next_cnt=0;
                     next_target_cnt=target_cnt;
                     next_state=S_WRITE;
@@ -323,7 +309,7 @@ module Calculator_Core (
                     next_target_cnt=0;
                     next_state=S_DONE;
                 end else begin
-                    next_cnt=cnt;
+                    next_cnt=cnt+1;
                     next_target_cnt=target_cnt;
                     next_state=S_WRITE;
                 end 
@@ -355,10 +341,10 @@ module Calculator_Core (
             state1<=state;
             cap_addr2<=cap_addr1;
             cap_addr1<=o_calc_req_addr;
-            if (state2==S_LOAD_A) begin
-                mem_a[cap_addr2-i_op1_addr]<=i_storage_rdata;
-            end else if (state2==S_LOAD_B) begin
-                mem_b[cap_addr2-i_op2_addr]<=i_storage_rdata;
+            if (state1==S_LOAD_A) begin // 1 or 2
+                mem_a[cap_addr1-i_op1_addr]<=i_storage_rdata;
+            end else if (state1==S_LOAD_B) begin
+                mem_b[cap_addr1-i_op2_addr]<=i_storage_rdata;
             end else begin
             end
         end
