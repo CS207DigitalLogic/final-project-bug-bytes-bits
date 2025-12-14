@@ -158,9 +158,7 @@ module Input_Subsystem (
             end
 
             S_USER_INPUT: begin
-                if (timeout_cnt >= TIMEOUT_VAL) 
-                    next_state = S_DONE;
-                else if (rx_pulse) begin
+                if (rx_pulse) begin
                     if (is_delimiter) begin
                         if (current_value > 9) next_state = S_RX_M; 
                         else if (w_input_addr + 1 >= expected_count) next_state = S_DONE;

@@ -31,7 +31,7 @@ module FSM_Controller (
     // 3. Display Subsystem 交互接口
     // =========================================================================
     input wire w_disp_done,           
-    input wire [1:0] i_disp_lut_idx_req, 
+    input wire [3:0] i_disp_lut_idx_req, 
     
     output reg w_en_display,          
     output reg [1:0] w_disp_mode,     
@@ -141,22 +141,55 @@ module FSM_Controller (
     reg [7:0] single_mat_size;
     integer i;
 
+    // --- 维度预测与查表信号 ---
+    reg [31:0] calc_pred_m, calc_pred_n;
+    reg [31:0] search_m, search_n;
+    reg        enable_search;
+
+    always @(*) begin
+        calc_pred_m = 0; calc_pred_n = 0;
+        if (r_op_code == 3'b000) begin      // Transpose
+            calc_pred_m = r_op1_n; calc_pred_n = r_op1_m;
+        end else if (r_op_code == 3'b010) begin // Scalar Mul / Custom
+            calc_pred_m = r_op1_m; calc_pred_n = r_op2_n; 
+        end else begin                      // Add / MatMul (011)
+            calc_pred_m = r_op1_m; calc_pred_n = r_op1_n; // 注意：这里需确保与下方 EXECUTE 逻辑一致
+        end
+    end
+
     always @(*) begin
         calc_match_found = 0;
         calc_match_index = 0;
         calc_final_addr  = 0;
-        single_mat_size  = (i_dim_m * i_dim_n);
+        
+        // 选择查表的数据源
+        if (current_state == S_INPUT_MODE || current_state == S_GEN_MODE || current_state == S_MENU_DISP_GET_DIM) begin
+            search_m = i_dim_m; 
+            search_n = i_dim_n;
+            enable_search = w_dims_valid; // 输入模式下，只有 valid 才查
+        end else begin
+            // 计算模式下，使用预测维度，且强制开启查表
+            search_m = calc_pred_m; 
+            search_n = calc_pred_n;
+            enable_search = (current_state == S_CALC_EXECUTE); 
+        end
 
-        if (w_dims_valid) begin
+        // 计算单矩阵大小
+        single_mat_size  = (search_m * search_n);
+
+        // 通用查表循环
+        if (enable_search) begin
             for (i = 0; i < MAX_TYPES; i = i + 1) begin
                 if (i < lut_count) begin
-                    if (lut_m[i] == i_dim_m && lut_n[i] == i_dim_n) begin
+                    // 比较 search_m/n 而不是 i_dim_m/n
+                    if (lut_m[i] == search_m && lut_n[i] == search_n) begin
                         calc_match_found = 1;
                         calc_match_index = i[2:0];
                     end
                 end
             end
-
+            
+            // 地址计算逻辑保持不变 (它会自动根据 lut_idx 计算出乒乓地址)
             if (calc_match_found) begin
                 if (lut_idx[calc_match_index] == 0)
                     calc_final_addr = lut_start_addr[calc_match_index];
@@ -164,7 +197,7 @@ module FSM_Controller (
                     calc_final_addr = lut_start_addr[calc_match_index] + single_mat_size;
             end 
             else begin
-                calc_final_addr = free_ptr;
+                calc_final_addr = free_ptr; // 没找到就用新地址
             end
         end
     end
@@ -353,16 +386,29 @@ module FSM_Controller (
                     w_en_input <= 1;
                     w_task_mode <= 0;
                     w_is_gen_mode <= (current_state == S_GEN_MODE);
+
                     
                     // LED 错误处理
-                    if (w_error_flag) led <= 8'b1000_0001; else led <= 8'b0000_0001;
+                    if (w_error_flag) led <= 8'b1111_1111; 
+                    else if (w_is_gen_mode) begin
+                        led <= 8'b0000_0100;
+                    end else begin
+                        led <= 8'b0000_0010;
+                    end
                     
-                    // MMU 逻辑 
-                    if (w_dims_valid && !w_addr_ready) begin
-                        w_base_addr_to_input <= calc_final_addr;
-                        w_addr_ready <= 1;
+                    // 1. 只要对方请求 (Valid)，我就一直给 (Ready)，直到对方撤销
+                    if (w_dims_valid) begin
+                        w_addr_ready <= 1; 
+                        w_base_addr_to_input <= calc_final_addr; // 持续输出地址
+                    end else begin
+                        w_addr_ready <= 0;
+                    end
+
+                    // 2. 只有在“刚建立握手”的那一瞬间 (Valid=1 且 之前Ready=0) 更新 LUT 表格
+                    // 注意：这里利用了时序逻辑的特性，在 ready 变成 1 的那一拍执行
+                    if (w_dims_valid && w_addr_ready == 0) begin
                         if (calc_match_found) begin
-                            lut_idx[calc_match_index] <= ~lut_idx[calc_match_index];
+                            lut_idx[calc_match_index] <= ~lut_idx[calc_match_index]; // 乒乓切换
                             if (lut_valid_cnt[calc_match_index] < 2)
                                 lut_valid_cnt[calc_match_index] <= lut_valid_cnt[calc_match_index] + 1;
                         end 
@@ -383,7 +429,12 @@ module FSM_Controller (
                 
                 S_MENU_DISP_GET_DIM: begin
                     w_en_input <= 1; w_task_mode <= 0; w_base_addr_to_input <= free_ptr;
-                    if (w_dims_valid && !w_addr_ready) w_addr_ready <= 1;
+                    led <= 8'b0001_0000;
+                    if (w_dims_valid) begin
+                        w_addr_ready <= 1; // 只要 valid 在，我就一直给 ready
+                    end else begin
+                        w_addr_ready <= 0; // valid 撤销了，我也撤销
+                    end
                     if (w_rx_done) w_en_input <= 0;
                 end
                 S_MENU_DISP_SHOW: begin
@@ -391,7 +442,9 @@ module FSM_Controller (
                     if (w_disp_done) w_en_display <= 0;
                 end
                 S_CALC_SELECT_OP: begin
+                    led <= 8'b0000_1000;
                     r_op_code <= sw[7:5];
+                    w_op_code <= sw[7:5];
                     if (sw[7:5] == 3'b000) r_target_stage <= 0; else r_target_stage <= 1; 
                     r_stage <= 0;
                 end
@@ -443,18 +496,37 @@ module FSM_Controller (
                     end
                 end
                 S_CALC_EXECUTE: begin
-                    w_start_calc <= 1; w_op_code <= r_op_code; w_res_addr <= free_ptr; 
+                    w_start_calc <= 1; w_op_code <= r_op_code; w_res_addr <= calc_final_addr;
+
                     if (r_op_code == 3'b000) begin r_res_m <= r_op1_n; r_res_n <= r_op1_m; end
                     else if (r_op_code == 3'b010) begin r_res_m <= r_op1_m; r_res_n <= r_op2_n; end
                     else begin r_res_m <= r_op1_m; r_res_n <= r_op1_n; end
                     if (w_calc_done) begin
                         w_start_calc <= 0;
-                        if (lut_count < MAX_TYPES) begin
-                            lut_m[lut_count] <= r_res_m; lut_n[lut_count] <= r_res_n;
-                            lut_start_addr[lut_count] <= free_ptr; 
-                            lut_valid_cnt[lut_count] <= 1; lut_idx[lut_count] <= 1;
-                            free_ptr <= free_ptr + (r_res_m * r_res_n);
-                            lut_count <= lut_count + 1;
+                        
+                        // 根据查表结果决定如何更新 LUT
+                        if (calc_match_found) begin
+                            // --- 情况 A: 找到了，覆盖旧类型 ---
+                            // 1. 翻转乒乓指针 (指向刚写完的那个)
+                            lut_idx[calc_match_index] <= ~lut_idx[calc_match_index];
+                            // 2. 如果之前只有1个，现在变2个
+                            if (lut_valid_cnt[calc_match_index] < 2)
+                                lut_valid_cnt[calc_match_index] <= lut_valid_cnt[calc_match_index] + 1;
+                            // 注意：free_ptr 和 lut_count 不需要动！
+                        end 
+                        else begin
+                            // --- 情况 B: 没找到，新建类型 (保持原逻辑) ---
+                            if (lut_count < MAX_TYPES) begin
+                                lut_m[lut_count] <= r_res_m;
+                                lut_n[lut_count] <= r_res_n;
+                                lut_start_addr[lut_count] <= free_ptr; 
+                                lut_valid_cnt[lut_count] <= 1; 
+                                lut_idx[lut_count] <= 1; // 新建的，Slot 0 (idx=0) 被占，下一次指 Slot 1? 
+                                                        // Input逻辑是 idx<=1 表示写了0。保持一致即可。
+                                free_ptr <= free_ptr + (r_res_m * r_res_n * 2); // 预留 x2 空间更安全? 
+                                                                                // 原代码是 x1，如果要做乒乓，最好在这里就 + (size*2)
+                                lut_count <= lut_count + 1;
+                            end
                         end
                     end
                 end
@@ -465,7 +537,7 @@ module FSM_Controller (
 
                 // 等待状态 LED 指示
                 S_WAIT_DECISION: begin
-                    led <= 8'b1111_0000; // 高4位亮灯提示 "等待指示"
+                    led <= 8'b1000_0000; // 亮灯提示 "等待指示"
                 end
 
                 S_ERROR: begin

@@ -19,7 +19,7 @@ module Display_Subsystem (
     // 汇总模式接口
     input wire [7:0] i_system_total_count, // 系统总共有多少个矩阵
     input wire [2:0] i_system_types_count, // 系统总共有几种规格
-    output reg [1:0] o_lut_idx_req,        // 告诉 FSM 我现在想看第几个规格的数据
+    output reg [3:0] o_lut_idx_req,        // 告诉 FSM 我现在想看第几个规格的数据
 
     // --- Storage 交互接口 ---
     input wire [31:0] w_storage_rdata, // 读回的数据
@@ -94,6 +94,8 @@ module Display_Subsystem (
     localparam S_SUM_STAR2    = 22;
     localparam S_SUM_CNT      = 23;
     localparam S_SUM_SP2      = 24;
+    localparam S_SUM_DONE_CR  = 25; // 发送回车 \r
+    localparam S_SUM_DONE_LF  = 26; // 发送换行 \n
     
     // Decimal Conversion States (New Engine)
     localparam S_CONV_START   = 40;
@@ -147,7 +149,7 @@ module Display_Subsystem (
             
             S_SUM_CHECK: begin
                 if (o_lut_idx_req < i_system_types_count) next_state = S_SUM_M;
-                else next_state = S_DONE;
+                else next_state = S_SUM_DONE_CR;
             end
             
             S_SUM_M:     next_state = S_CONV_START; // Send M
@@ -156,6 +158,9 @@ module Display_Subsystem (
             S_SUM_STAR2: if (w_tx_ready) next_state = S_SUM_CNT;
             S_SUM_CNT:   next_state = S_CONV_START; // Send Count
             S_SUM_SP2:   if (w_tx_ready) next_state = S_SUM_CHECK;
+
+            S_SUM_DONE_CR: if (w_tx_ready) next_state = S_SUM_DONE_LF;
+            S_SUM_DONE_LF: if (w_tx_ready) next_state = S_DONE;
 
             // --- List/Single Matrix Mode ---
             S_LIST_SHOW_ID: next_state = S_CONV_START; // Send ID
@@ -274,6 +279,16 @@ module Display_Subsystem (
                 S_SUM_SP2: if (w_tx_ready) begin 
                     w_disp_tx_data <= ASC_SPACE; w_disp_tx_en <= 1; 
                     o_lut_idx_req <= o_lut_idx_req + 1; 
+                end
+
+                S_SUM_DONE_CR: if (w_tx_ready) begin
+                    w_disp_tx_data <= ASC_CR; // 发送 \r (13)
+                    w_disp_tx_en <= 1;
+                end
+
+                S_SUM_DONE_LF: if (w_tx_ready) begin
+                    w_disp_tx_data <= ASC_LF; // 发送 \n (10)
+                    w_disp_tx_en <= 1;
                 end
 
                 // --- List ID Prep ---
