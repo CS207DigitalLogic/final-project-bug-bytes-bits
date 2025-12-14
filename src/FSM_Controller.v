@@ -2,22 +2,18 @@ module FSM_Controller (
     input wire clk,
     input wire rst_n,
 
-    // =========================================================================
-    // 1. 物理接口
-    // =========================================================================
-    input wire [7:0] sw,      // sw[1:0] 模式选择
-    input wire [4:0] btn,     // btn[0] 返回菜单, btn[1] 重试/继续
-    output reg [7:0] led,     // 状态/报错指示
+    // --- 物理接口 ---
+    input wire [7:0] sw,
+    input wire [4:0] btn,
+    output reg [7:0] led,
 
-    // =========================================================================
-    // 2. Input Subsystem 交互接口
-    // =========================================================================
+    // --- Input Subsystem ---
     input wire w_dims_valid,  
     input wire [31:0] i_dim_m,
     input wire [31:0] i_dim_n,
     input wire w_rx_done,     
     input wire w_error_flag,  
-    input wire w_timeout,
+    input wire w_timeout,     // 【关键】接收超时信号
     
     input wire [31:0] i_input_id_val, 
     input wire w_id_valid,            
@@ -28,9 +24,7 @@ module FSM_Controller (
     output reg w_addr_ready,  
     output reg [7:0] w_base_addr_to_input, 
 
-    // =========================================================================
-    // 3. Display Subsystem 交互接口
-    // =========================================================================
+    // --- Display Subsystem ---
     input wire w_disp_done,           
     input wire [3:0] i_disp_lut_idx_req, 
     
@@ -46,31 +40,27 @@ module FSM_Controller (
     output wire [2:0] w_system_types_count,
     output reg [7:0] w_disp_target_addr, 
 
-    // =========================================================================
-    // 4. Calculator Core 交互接口
-    // =========================================================================
+    // --- Calculator Core ---
     input wire w_calc_done,       
     output reg w_start_calc,      
     output reg [2:0] w_op_code,  
     output reg [7:0] w_op1_addr,  
     output reg [7:0] w_op2_addr,  
-    
     output reg [31:0] w_op1_m,
     output reg [31:0] w_op1_n,
     output reg [31:0] w_op2_m,
     output reg [31:0] w_op2_n,
-    
     output reg [7:0] w_res_addr,  
     
-    // 【注意】状态位宽改为 5 位
-    output wire [4:0] w_state
+    output wire [4:0] w_state,
+    output reg w_logic_error // 【新增】逻辑错误标志（给Top层控制倒计时）
 );
+
     // =========================================================================
-    // 参数定义
+    // 参数与内部信号
     // =========================================================================
-    // 状态位宽升级为 5 bit
     localparam S_IDLE              = 5'd0;
-    localparam S_INPUT_MODE        = 5'd1; 
+    localparam S_INPUT_MODE        = 5'd1;
     localparam S_GEN_MODE          = 5'd2;
     localparam S_CALC_SELECT_OP    = 5'd3;
     localparam S_CALC_GET_DIM      = 5'd4; 
@@ -81,34 +71,28 @@ module FSM_Controller (
     localparam S_CALC_SHOW_MAT     = 5'd9;
     localparam S_CALC_EXECUTE      = 5'd10;
     localparam S_CALC_RES_SHOW     = 5'd11;
-    
     localparam S_MENU_DISP_GET_DIM = 5'd12;
     localparam S_MENU_DISP_FILTER  = 5'd13;
     localparam S_MENU_DISP_SHOW    = 5'd14;
     localparam S_ERROR             = 5'd15;
-    
-    //等待决策状态
     localparam S_WAIT_DECISION     = 5'd16;
 
     localparam MAX_TYPES = 4;
 
-    // =========================================================================
-    // 内部寄存器
-    // =========================================================================
-    reg [4:0] current_state, next_state; // 5-bit state
+    reg [4:0] current_state, next_state;
     
-    // --- MMU 账本 ---
-    reg [31:0] lut_m [0:MAX_TYPES-1];     
+    // MMU 账本
+    reg [31:0] lut_m [0:MAX_TYPES-1];
     reg [31:0] lut_n [0:MAX_TYPES-1];
     reg [7:0]  lut_start_addr [0:MAX_TYPES-1];
-    reg        lut_idx [0:MAX_TYPES-1]; 
+    reg        lut_idx [0:MAX_TYPES-1];
     reg [1:0]  lut_valid_cnt [0:MAX_TYPES-1];
     reg [2:0]  lut_count;
     reg [7:0]  free_ptr;
 
-    // --- 上下文 ---
+    // 上下文
     reg [2:0] r_op_code;
-    reg       r_stage;      
+    reg       r_stage;
     reg       r_target_stage;
     reg [1:0] r_hit_type_idx; 
     reg       r_hit_found;
@@ -117,118 +101,93 @@ module FSM_Controller (
     reg [7:0]  r_op1_addr, r_op2_addr;
     reg [31:0] r_op1_m, r_op1_n; 
     reg [31:0] r_op2_m, r_op2_n; 
-    
     reg [31:0] r_res_m, r_res_n;
-
-    // 重试状态记忆
     reg [4:0] r_retry_state;
 
-    // --- 按键消抖 ---
     reg btn0_d0, btn0_d1;
-    reg btn1_d0, btn1_d1; // 新增 btn1
+    reg btn1_d0, btn1_d1;
     wire btn_confirm_pose;
-    wire btn_retry_pose;  // 新增
+    wire btn_retry_pose;
+    
     assign btn_confirm_pose = btn0_d0 & ~btn0_d1;
     assign btn_retry_pose   = btn1_d0 & ~btn1_d1;
 
     // =========================================================================
     // 0. 辅助组合逻辑 
     // =========================================================================
-    
-    // --- MMU 查表逻辑 ---
     reg       calc_match_found;
     reg [2:0] calc_match_index;
     reg [7:0] calc_final_addr;
     reg [7:0] single_mat_size;
     integer i;
-
-    // --- 维度预测与查表信号 ---
     reg [31:0] calc_pred_m, calc_pred_n;
     reg [31:0] search_m, search_n;
     reg        enable_search;
 
+    // (预测逻辑保持不变)
     always @(*) begin
         calc_pred_m = 0; calc_pred_n = 0;
         if (r_op_code == 3'b000) begin      // Transpose
             calc_pred_m = r_op1_n; calc_pred_n = r_op1_m;
-        end else if (r_op_code == 3'b010) begin // Scalar Mul / Custom
+        end else if (r_op_code == 3'b010) begin // Scalar Mul
             calc_pred_m = r_op1_m; calc_pred_n = r_op2_n; 
-        end else begin                      // Add / MatMul (011)
-            calc_pred_m = r_op1_m; calc_pred_n = r_op1_n; // 注意：这里需确保与下方 EXECUTE 逻辑一致
+        end else begin                      // Add / MatMul
+            calc_pred_m = r_op1_m; calc_pred_n = r_op1_n;
         end
     end
 
+    // (查表逻辑保持不变)
     always @(*) begin
         calc_match_found = 0;
         calc_match_index = 0;
         calc_final_addr  = 0;
         
-        // 选择查表的数据源
         if (current_state == S_INPUT_MODE || current_state == S_GEN_MODE || current_state == S_MENU_DISP_GET_DIM) begin
-            search_m = i_dim_m; 
-            search_n = i_dim_n;
-            enable_search = w_dims_valid; // 输入模式下，只有 valid 才查
+            search_m = i_dim_m; search_n = i_dim_n;
+            enable_search = w_dims_valid; 
         end else begin
-            // 计算模式下，使用预测维度，且强制开启查表
-            search_m = calc_pred_m; 
-            search_n = calc_pred_n;
+            search_m = calc_pred_m; search_n = calc_pred_n;
             enable_search = (current_state == S_CALC_EXECUTE); 
         end
 
-        // 计算单矩阵大小
         single_mat_size  = (search_m * search_n);
-
-        // 通用查表循环
         if (enable_search) begin
             for (i = 0; i < MAX_TYPES; i = i + 1) begin
                 if (i < lut_count) begin
-                    // 比较 search_m/n 而不是 i_dim_m/n
                     if (lut_m[i] == search_m && lut_n[i] == search_n) begin
                         calc_match_found = 1;
                         calc_match_index = i[2:0];
                     end
                 end
             end
-            
-            // 地址计算逻辑保持不变 (它会自动根据 lut_idx 计算出乒乓地址)
             if (calc_match_found) begin
-                if (lut_idx[calc_match_index] == 0)
-                    calc_final_addr = lut_start_addr[calc_match_index];
-                else
-                    calc_final_addr = lut_start_addr[calc_match_index] + single_mat_size;
+                if (lut_idx[calc_match_index] == 0) calc_final_addr = lut_start_addr[calc_match_index];
+                else calc_final_addr = lut_start_addr[calc_match_index] + single_mat_size;
             end 
             else begin
-                calc_final_addr = free_ptr; // 没找到就用新地址
+                calc_final_addr = free_ptr;
             end
         end
     end
 
-    // --- Display 参数 MUX ---
+    // (Display MUX 保持不变)
     always @(*) begin
-        w_disp_m = 0;
-        w_disp_n = 0; w_disp_total_cnt = 0; w_disp_base_addr = 0;
-
+        w_disp_m = 0; w_disp_n = 0; w_disp_total_cnt = 0; w_disp_base_addr = 0;
         if (w_disp_mode == 2) begin 
-            w_disp_m         = lut_m[i_disp_lut_idx_req];
-            w_disp_n         = lut_n[i_disp_lut_idx_req];
+            w_disp_m = lut_m[i_disp_lut_idx_req]; w_disp_n = lut_n[i_disp_lut_idx_req];
             w_disp_total_cnt = lut_valid_cnt[i_disp_lut_idx_req];
             w_disp_base_addr = 0;
         end 
         else if (current_state == S_CALC_RES_SHOW) begin
-            w_disp_m         = r_res_m;
-            w_disp_n         = r_res_n;
-            w_disp_total_cnt = 1; 
-            w_disp_base_addr = w_res_addr;
+            w_disp_m = r_res_m; w_disp_n = r_res_n;
+            w_disp_total_cnt = 1; w_disp_base_addr = w_res_addr;
         end
         else if (current_state == S_MENU_DISP_SHOW) begin
-            w_disp_m         = i_dim_m;
-            w_disp_n         = i_dim_n;
-            w_disp_total_cnt = 1;
-            w_disp_base_addr = free_ptr;
+            w_disp_m = i_dim_m; w_disp_n = i_dim_n;
+            w_disp_total_cnt = 1; w_disp_base_addr = free_ptr;
         end
         else begin 
-            w_disp_m         = lut_m[r_hit_type_idx];
-            w_disp_n         = lut_n[r_hit_type_idx];
+            w_disp_m = lut_m[r_hit_type_idx]; w_disp_n = lut_n[r_hit_type_idx];
             w_disp_total_cnt = lut_valid_cnt[r_hit_type_idx];
             w_disp_base_addr = lut_start_addr[r_hit_type_idx];
         end
@@ -239,21 +198,18 @@ module FSM_Controller (
     assign w_state = current_state;
 
     // =========================================================================
-    // Stage 1: 状态寄存器更新
+    // Stage 1: 状态跳转
     // =========================================================================
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) 
-            current_state <= S_IDLE;
-        else 
-            current_state <= next_state;
+        if (!rst_n) current_state <= S_IDLE;
+        else current_state <= next_state;
     end
 
     // =========================================================================
-    // Stage 2: 次态逻辑判断
+    // Stage 2: 次态逻辑 (重点修改：错误重试逻辑)
     // =========================================================================
     always @(*) begin
         next_state = current_state;
-
         case (current_state)
             S_IDLE: begin
                 if (btn_confirm_pose) begin
@@ -266,7 +222,6 @@ module FSM_Controller (
                 end
             end
 
-            // 完成后跳转至 S_WAIT_DECISION
             S_INPUT_MODE, S_GEN_MODE: begin
                 if (w_rx_done) next_state = S_WAIT_DECISION;
                 else if (w_timeout) next_state = S_ERROR;
@@ -274,6 +229,7 @@ module FSM_Controller (
 
             S_MENU_DISP_GET_DIM: begin
                 if (w_rx_done) next_state = S_MENU_DISP_SHOW;
+                else if (w_timeout) next_state = S_ERROR; // 增加超时检查
             end
 
             S_MENU_DISP_SHOW: begin
@@ -289,24 +245,31 @@ module FSM_Controller (
             end
 
             S_CALC_GET_DIM: begin
-                if (w_dims_valid) next_state = S_CALC_FILTER;
+                // 【修改】在此处检查超时，如果用户一直不输或输错多次导致超时
+                if (w_timeout) next_state = S_ERROR;
+                else if (w_dims_valid) next_state = S_CALC_FILTER;
             end
 
             S_CALC_FILTER: begin
+                // 自动跳到 List，如果找不到，在 List 状态里判决
                 next_state = S_CALC_SHOW_LIST;
             end
 
             S_CALC_SHOW_LIST: begin
-                if (r_hit_found == 0) next_state = S_ERROR;
+                // 【修改】如果查不到矩阵 (Logic Error)：
+                // 不要跳 S_ERROR，而是跳回 S_CALC_GET_DIM 允许重输
+                if (r_hit_found == 0) next_state = S_CALC_GET_DIM;
                 else if (w_disp_done) next_state = S_CALC_GET_ID;
             end
 
             S_CALC_GET_ID: begin
-                if (w_id_valid) begin
+                // 【修改】在此处检查超时
+                if (w_timeout) next_state = S_ERROR;
+                else if (w_id_valid) begin
+                    // 如果 ID 合法，继续
                     if (i_input_id_val > 0 && i_input_id_val <= lut_valid_cnt[r_hit_type_idx])
                         next_state = S_CALC_SHOW_MAT;
-                    else
-                        next_state = S_ERROR;
+                    // 如果 ID 不合法，【保持当前状态】，由 Stage 3 输出逻辑错误信号触发倒计时
                 end
             end
 
@@ -325,10 +288,9 @@ module FSM_Controller (
                 if (w_disp_done) next_state = S_WAIT_DECISION;
             end
 
-            // 等待决策状态
             S_WAIT_DECISION: begin
-                if (btn_confirm_pose) next_state = S_IDLE;       // Btn0: 返回主菜单
-                else if (btn_retry_pose) next_state = r_retry_state; // Btn1: 继续/重试
+                if (btn_confirm_pose) next_state = S_IDLE;
+                else if (btn_retry_pose) next_state = r_retry_state;
             end
 
             S_ERROR: begin
@@ -344,35 +306,28 @@ module FSM_Controller (
     // =========================================================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            // 复位逻辑...
+            // ... (复位逻辑同原代码) ...
             lut_count <= 0; free_ptr <= 0;
             for(i=0; i<MAX_TYPES; i=i+1) lut_valid_cnt[i] <= 0;
             for(i=0; i<MAX_TYPES; i=i+1) lut_idx[i] <= 0;
-            w_en_input <= 0; w_en_display <= 0; w_start_calc <= 0;
-            w_addr_ready <= 0;
-            r_res_m <= 0; r_res_n <= 0;
-            led <= 0;
+            w_en_input <= 0; w_en_display <= 0; w_start_calc <= 0; w_addr_ready <= 0;
+            r_res_m <= 0; r_res_n <= 0; led <= 0;
             w_op1_addr <= 0; w_op2_addr <= 0; w_res_addr <= 0;
             w_op1_m <= 0; w_op1_n <= 0; w_op2_m <= 0; w_op2_n <= 0;
-            btn0_d0 <= 0; btn0_d1 <= 0;
-            btn1_d0 <= 0; btn1_d1 <= 0;
+            btn0_d0 <= 0; btn0_d1 <= 0; btn1_d0 <= 0; btn1_d1 <= 0;
             r_retry_state <= S_IDLE;
+            w_logic_error <= 0; // 【新增】复位
         end 
         else begin
-            w_addr_ready <= 0;
-            w_start_calc <= 0;
+            w_addr_ready <= 0; w_start_calc <= 0;
 
-            // 按键消抖
             btn0_d0 <= btn[0]; btn0_d1 <= btn0_d0;
             btn1_d0 <= btn[1]; btn1_d1 <= btn1_d0;
 
             case (current_state)
                 S_IDLE: begin
-                    w_en_input <= 0;
-                    w_en_display <= 0;
+                    w_en_input <= 0; w_en_display <= 0; w_logic_error <= 0;
                     led <= 8'b0000_0001; 
-                    
-                    //在离开 IDLE 时记录该去哪里重试
                     if (btn_confirm_pose) begin
                         case (sw[1:0])
                             2'b00: r_retry_state <= S_INPUT_MODE;
@@ -383,44 +338,31 @@ module FSM_Controller (
                     end
                 end
 
-                
                 S_INPUT_MODE, S_GEN_MODE: begin
-                    w_en_input <= 1;
-                    w_task_mode <= 0;
+                    w_en_input <= 1; w_task_mode <= 0;
                     w_is_gen_mode <= (current_state == S_GEN_MODE);
-
                     
-                    // LED 错误处理
-                    if (w_error_flag) led <= 8'b1111_1111; 
-                    else if (w_is_gen_mode) begin
-                        led <= 8'b0000_0100;
-                    end else begin
-                        led <= 8'b0000_0010;
-                    end
+                    // LED 错误指示
+                    if (w_error_flag) led <= 8'b1111_1111;
+                    else if (w_is_gen_mode) led <= 8'b0000_0100;
+                    else led <= 8'b0000_0010;
                     
-                    // 1. 只要对方请求 (Valid)，我就一直给 (Ready)，直到对方撤销
+                    // 地址握手与 LUT 更新逻辑保持不变 ...
                     if (w_dims_valid) begin
-                        w_addr_ready <= 1; 
-                        w_base_addr_to_input <= calc_final_addr; // 持续输出地址
-                    end else begin
-                        w_addr_ready <= 0;
-                    end
+                        w_addr_ready <= 1; w_base_addr_to_input <= calc_final_addr;
+                    end else w_addr_ready <= 0;
 
-                    // 2. 只有在“刚建立握手”的那一瞬间 (Valid=1 且 之前Ready=0) 更新 LUT 表格
-                    // 注意：这里利用了时序逻辑的特性，在 ready 变成 1 的那一拍执行
                     if (w_dims_valid && w_addr_ready == 0) begin
-                        if (calc_match_found) begin
-                            lut_idx[calc_match_index] <= ~lut_idx[calc_match_index]; // 乒乓切换
+                         if (calc_match_found) begin
+                            lut_idx[calc_match_index] <= ~lut_idx[calc_match_index];
                             if (lut_valid_cnt[calc_match_index] < 2)
                                 lut_valid_cnt[calc_match_index] <= lut_valid_cnt[calc_match_index] + 1;
                         end 
                         else begin
                             if (lut_count < MAX_TYPES) begin
-                                lut_m[lut_count] <= i_dim_m;
-                                lut_n[lut_count] <= i_dim_n;
+                                lut_m[lut_count] <= i_dim_m; lut_n[lut_count] <= i_dim_n;
                                 lut_start_addr[lut_count] <= free_ptr;
-                                lut_idx[lut_count] <= 1;
-                                lut_valid_cnt[lut_count] <= 1;
+                                lut_idx[lut_count] <= 1; lut_valid_cnt[lut_count] <= 1;
                                 free_ptr <= free_ptr + (single_mat_size << 1);
                                 lut_count <= lut_count + 1;
                             end
@@ -432,32 +374,35 @@ module FSM_Controller (
                 S_MENU_DISP_GET_DIM: begin
                     w_en_input <= 1; w_task_mode <= 0; w_base_addr_to_input <= free_ptr;
                     led <= 8'b0001_0000;
-                    if (w_dims_valid) begin
-                        w_addr_ready <= 1; // 只要 valid 在，我就一直给 ready
-                    end else begin
-                        w_addr_ready <= 0; // valid 撤销了，我也撤销
-                    end
+                    if (w_dims_valid) w_addr_ready <= 1; else w_addr_ready <= 0;
                     if (w_rx_done) w_en_input <= 0;
                 end
                 S_MENU_DISP_SHOW: begin
                     w_en_display <= 1; w_disp_mode <= 0;
                     if (w_disp_done) w_en_display <= 0;
                 end
+
+                // --- 计算模式 ---
                 S_CALC_SELECT_OP: begin
                     led <= 8'b0000_1000;
-                    r_op_code <= sw[7:5];
-                    w_op_code <= sw[7:5];
+                    r_op_code <= sw[7:5]; w_op_code <= sw[7:5];
                     if (sw[7:5] == 3'b000) r_target_stage <= 0; else r_target_stage <= 1; 
-                    r_stage <= 0;
+                    r_stage <= 0; w_logic_error <= 0; // 清除之前的错误
                 end
                 S_CALC_SHOW_SUMMARY: begin
                     w_en_display <= 1; w_disp_mode <= 2;
                     if (w_disp_done) w_en_display <= 0;
                 end
+
                 S_CALC_GET_DIM: begin
                     w_en_input <= 1; w_task_mode <= 1; 
-                    if (w_dims_valid) w_en_input <= 0;
+                    // 【修改】如果之前因为查不到而报错，现在用户一旦开始重新输入成功(valid)，就清除错误
+                    if (w_dims_valid) begin 
+                        w_en_input <= 0; 
+                        w_logic_error <= 0; // 清除逻辑错误
+                    end
                 end
+
                 S_CALC_FILTER: begin
                     r_hit_found <= 0; r_hit_type_idx <= 0;
                     for (i=0; i<MAX_TYPES; i=i+1) begin
@@ -466,16 +411,25 @@ module FSM_Controller (
                         end
                     end
                 end
+
                 S_CALC_SHOW_LIST: begin
-                    if (r_hit_found != 0) begin
+                    // 【修改】如果查不到矩阵，拉高逻辑错误标志，让 Top 倒计时
+                    if (r_hit_found == 0) begin
+                        w_logic_error <= 1; // 报错！
+                        // 状态机会跳回 GET_DIM
+                    end
+                    else begin
                         w_en_display <= 1; w_disp_mode <= 1;
                         if (w_disp_done) w_en_display <= 0;
                     end
                 end
+
                 S_CALC_GET_ID: begin
                     w_en_input <= 1; w_task_mode <= 2;
                     if (w_id_valid) begin
                         if (i_input_id_val > 0 && i_input_id_val <= lut_valid_cnt[r_hit_type_idx]) begin
+                            // 输入正确
+                            w_logic_error <= 0; // 清除错误
                             r_selected_id <= i_input_id_val[1:0];
                             if (r_stage == 0) begin
                                 w_op1_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
@@ -488,8 +442,13 @@ module FSM_Controller (
                             end
                             w_en_input <= 0;
                         end
+                        else begin
+                            // 【修改】ID 越界逻辑错误 -> 拉高标志，触发倒计时
+                            w_logic_error <= 1;
+                        end
                     end
                 end
+
                 S_CALC_SHOW_MAT: begin
                     w_en_display <= 1; w_disp_mode <= 3; w_disp_selected_id <= r_selected_id;
                     if (w_disp_done) begin
@@ -497,36 +456,25 @@ module FSM_Controller (
                         if (r_stage < r_target_stage) r_stage <= r_stage + 1;
                     end
                 end
+                
+                // EXECUTE, RES_SHOW, WAIT_DECISION, ERROR 保持不变 ...
                 S_CALC_EXECUTE: begin
                     w_start_calc <= 1; w_op_code <= r_op_code; w_res_addr <= calc_final_addr;
-
                     if (r_op_code == 3'b000) begin r_res_m <= r_op1_n; r_res_n <= r_op1_m; end
                     else if (r_op_code == 3'b010) begin r_res_m <= r_op1_m; r_res_n <= r_op2_n; end
                     else begin r_res_m <= r_op1_m; r_res_n <= r_op1_n; end
                     if (w_calc_done) begin
                         w_start_calc <= 0;
-                        
-                        // 根据查表结果决定如何更新 LUT
                         if (calc_match_found) begin
-                            // --- 情况 A: 找到了，覆盖旧类型 ---
-                            // 1. 翻转乒乓指针 (指向刚写完的那个)
                             lut_idx[calc_match_index] <= ~lut_idx[calc_match_index];
-                            // 2. 如果之前只有1个，现在变2个
-                            if (lut_valid_cnt[calc_match_index] < 2)
-                                lut_valid_cnt[calc_match_index] <= lut_valid_cnt[calc_match_index] + 1;
-                            // 注意：free_ptr 和 lut_count 不需要动！
+                            if (lut_valid_cnt[calc_match_index] < 2) lut_valid_cnt[calc_match_index] <= lut_valid_cnt[calc_match_index] + 1;
                         end 
                         else begin
-                            // --- 情况 B: 没找到，新建类型 (保持原逻辑) ---
                             if (lut_count < MAX_TYPES) begin
-                                lut_m[lut_count] <= r_res_m;
-                                lut_n[lut_count] <= r_res_n;
+                                lut_m[lut_count] <= r_res_m; lut_n[lut_count] <= r_res_n;
                                 lut_start_addr[lut_count] <= free_ptr; 
-                                lut_valid_cnt[lut_count] <= 1; 
-                                lut_idx[lut_count] <= 1; // 新建的，Slot 0 (idx=0) 被占，下一次指 Slot 1? 
-                                                        // Input逻辑是 idx<=1 表示写了0。保持一致即可。
-                                free_ptr <= free_ptr + (r_res_m * r_res_n * 2); // 预留 x2 空间更安全? 
-                                                                                // 原代码是 x1，如果要做乒乓，最好在这里就 + (size*2)
+                                lut_valid_cnt[lut_count] <= 1; lut_idx[lut_count] <= 1;
+                                free_ptr <= free_ptr + (r_res_m * r_res_n * 2);
                                 lut_count <= lut_count + 1;
                             end
                         end
@@ -536,15 +484,8 @@ module FSM_Controller (
                     w_en_display <= 1; w_disp_mode <= 0; 
                     if (w_disp_done) w_en_display <= 0;
                 end
-
-                // 等待状态 LED 指示
-                S_WAIT_DECISION: begin
-                    led <= 8'b1000_0000; // 亮灯提示 "等待指示"
-                end
-
-                S_ERROR: begin
-                    led <= 8'b1111_1111;
-                end
+                S_WAIT_DECISION: led <= 8'b1000_0000;
+                S_ERROR: led <= 8'b1111_1111;
             endcase
         end
     end

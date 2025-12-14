@@ -1,83 +1,66 @@
+`timescale 1ns / 1ps
+
 module Input_Subsystem (
     input wire clk, 
     input wire rst_n, 
     input wire uart_rx, 
-    input wire w_en_input, //FSM说准备工作
-    // FSM 交互接口
-    input wire [7:0] w_base_addr,//FSM给的基地址      
-    input wire w_addr_ready, //FSM告诉地址准备好了，可以读取了          
-    input wire w_is_gen_mode, //FSM控制的模式选择         
+    input wire w_en_input, 
+    input wire [7:0] w_base_addr,      
+    input wire w_addr_ready,          
+    input wire w_is_gen_mode,         
+    input wire [1:0] w_task_mode, 
 
-    // 任务模式控制
-    input wire [1:0] w_task_mode, //0:手动输入和生成模式 1:矩阵维度选择 2:矩阵编号选择
-
-    output reg w_input_we, //控制MUX使能的
-    output wire [7:0] w_real_addr, //给MUX的
-    output reg [31:0] w_input_data, //给MUX的
-    output reg w_rx_done, //告诉FSM全读完了        
-    output reg w_error_flag, //告诉FSM有错      
+    output reg w_input_we, 
+    output wire [7:0] w_real_addr, 
+    output reg [31:0] w_input_data, 
+    output reg w_rx_done,         
+    output reg w_error_flag, // 1=输入有误(开启外部倒计时)，0=正常
     
-    // 握手接口
-    output wire [31:0] w_dim_m, //给FSM让它查表给基地址的
+    output wire [31:0] w_dim_m, 
     output wire [31:0] w_dim_n,
-    output reg w_dims_valid, //告诉FSM维度合不合法     
-    
-    // ID 读取接口
-    output reg [31:0] w_input_id_val, //给出编号信息
+    output reg w_dims_valid, 
+    output reg [31:0] w_input_id_val, 
     output reg w_id_valid         
 );
 
-    // =========================================================================
-    // 参数定义
-    // =========================================================================
     localparam ASC_0     = 8'd48;
     localparam ASC_SPACE = 8'd32;
     localparam ASC_CR    = 8'd13;
     localparam ASC_LF    = 8'd10;
 
-    // 状态定义
-    localparam S_RX_M       = 0; 
+    localparam S_RX_M       = 0;
     localparam S_RX_N       = 1; 
-    localparam S_RX_COUNT   = 2; 
+    localparam S_RX_COUNT   = 2;
     localparam S_WAIT_ADDR  = 3; 
     localparam S_PRE_CLEAR  = 4; 
     localparam S_USER_INPUT = 5; 
-    localparam S_GEN_FILL   = 6; 
+    localparam S_GEN_FILL   = 6;
+    localparam S_GEN_WAIT   = 8;
     localparam S_DONE       = 7; 
 
-    parameter TIMEOUT_VAL = 32'd50_000_000;
-
-    // =========================================================================
-    // 内部信号
-    // =========================================================================
-    reg [3:0] state, next_state; 
-
+    reg [3:0] state, next_state;
     reg [31:0] current_value;
     reg [31:0] reg_m, reg_n, expected_count;
     reg [7:0]  w_input_addr; 
     
     reg [31:0] gen_total_mats;
-    reg [31:0] gen_curr_cnt;   
+    reg [31:0] gen_curr_cnt;
     reg [31:0] lfsr_reg;
     wire [31:0] random_val;
 
-    reg [31:0] timeout_cnt;
-
     wire [7:0] rx_data;
     wire rx_pulse;
-
     wire is_digit;
     wire is_delimiter;
-    
+
     assign is_digit = (rx_data >= ASC_0 && rx_data <= ASC_0+9);
     assign is_delimiter = (rx_data == ASC_SPACE || rx_data == ASC_CR || rx_data == ASC_LF);
-    
-    assign w_real_addr = w_input_addr + w_base_addr;//这是对应寄存器的真实地址
+    assign w_real_addr = w_input_addr + w_base_addr;
     assign w_dim_m = reg_m;
     assign w_dim_n = reg_n;
     
     assign random_val = lfsr_reg[3:0] % 10;
-    always @(posedge clk) begin //伪随机数生成
+    always @(posedge clk) begin 
         if (!rst_n) lfsr_reg <= 32'hACE1;
         else lfsr_reg <= {lfsr_reg[30:0], lfsr_reg[31] ^ lfsr_reg[21] ^ lfsr_reg[1]};
     end
@@ -85,7 +68,7 @@ module Input_Subsystem (
     uart_rx #(
         .CLK_FREQ(100_000_000),
         .BAUD_RATE(115200)
-    ) dut (
+    ) u_uart_rx (
         .clk(clk),
         .rst_n(rst_n),
         .rx(uart_rx),
@@ -103,46 +86,34 @@ module Input_Subsystem (
     end
 
     // =========================================================================
-    // Stage 2: 次态逻辑 
+    // Stage 2: 次态逻辑 (保持宽容，错误时不跳转)
     // =========================================================================
     always @(*) begin
-        next_state = state; //在完成某个state的任务前默认保持
+        next_state = state; // 默认留在当前状态
 
         case (state)
             S_RX_M: begin
-                if (rx_pulse) begin
-                    if (is_delimiter) begin
-                        if (w_task_mode == 2) next_state = S_DONE; //矩阵编号选择的接收
-                        // 如果数值非法，保持在 S_RX_M 
-                        else if (current_value >= 1 && current_value <= 5) next_state = S_RX_N;
-                    end
-                    else if (!is_digit) begin
-                        // 收到非法字符，保持在 S_RX_M 
-                    end
+                if (rx_pulse && is_delimiter) begin
+                    if (w_task_mode == 2) next_state = S_DONE; 
+                    else if (current_value >= 1 && current_value <= 5) next_state = S_RX_N;
                 end
             end
 
             S_RX_N: begin
-                if (rx_pulse) begin
-                    if (is_delimiter) begin
-                        if (current_value >= 1 && current_value <= 5) begin
-                            if (w_task_mode == 1) next_state = S_DONE; 
-                            else if (w_is_gen_mode) next_state = S_RX_COUNT; //生成模式读取需要生成的矩阵数目
-                            else next_state = S_WAIT_ADDR;
-                        end
-                        else next_state = S_RX_M; // 维度N错误 -> 回到起点
+                if (rx_pulse && is_delimiter) begin
+                    if (current_value >= 1 && current_value <= 5) begin
+                        if (w_task_mode == 1) next_state = S_DONE;
+                        else if (w_is_gen_mode) next_state = S_RX_COUNT;
+                        else next_state = S_WAIT_ADDR;
                     end
-                    else if (!is_digit) next_state = S_RX_M; // 非法字符 -> 回到起点
+                    else next_state = S_RX_M; // 维度配置错误，重置
                 end
             end
 
             S_RX_COUNT: begin
-                if (rx_pulse) begin
-                    if (is_delimiter) begin
-                        if (current_value >= 1 && current_value <= 2) next_state = S_WAIT_ADDR;
-                        else next_state = S_RX_M; // 数量错误 -> 回到起点
-                    end
-                    else if (!is_digit) next_state = S_RX_M; // 非法字符 -> 回到起点
+                if (rx_pulse && is_delimiter) begin
+                    if (current_value >= 1 && current_value <= 2) next_state = S_WAIT_ADDR;
+                    else next_state = S_RX_M;
                 end
             end
 
@@ -154,34 +125,35 @@ module Input_Subsystem (
             end
 
             S_PRE_CLEAR: begin
-                if (w_input_addr >= expected_count-1) next_state = S_USER_INPUT; 
+                if (w_input_addr >= expected_count-1) next_state = S_USER_INPUT;
             end
 
             S_USER_INPUT: begin
-                if (rx_pulse) begin
-                    if (is_delimiter) begin
-                        if (current_value > 9) next_state = S_RX_M; 
-                        else if (w_input_addr + 1 >= expected_count) next_state = S_DONE;
-                        else if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_DONE;
+                if (rx_pulse && is_delimiter) begin
+                    if (current_value > 9) begin
+                        // 数值错误，留在原地等待重输 (Stage 3 会置 error flag)
+                        next_state = S_USER_INPUT;
                     end
-                    else if (!is_digit) next_state = S_RX_M; 
+                    else if (w_input_addr + 1 >= expected_count) next_state = S_DONE;
+                    else if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_DONE;
                 end
             end
 
             S_GEN_FILL: begin
                 if (w_input_addr >= expected_count-1) begin
                     if (gen_curr_cnt + 1 < gen_total_mats) next_state = S_WAIT_ADDR;
-                    else next_state = S_DONE;
+                    else next_state = S_GEN_WAIT;
                 end
             end
 
+            S_GEN_WAIT: next_state = S_DONE;
             S_DONE: next_state = S_DONE;
             default: next_state = S_RX_M;
         endcase
     end
 
     // =========================================================================
-    // Stage 3: 数据输出与寄存器更新
+    // Stage 3: 数据输出 (控制 w_error_flag)
     // =========================================================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -191,24 +163,20 @@ module Input_Subsystem (
             w_input_id_val <= 0; w_id_valid <= 0;
             reg_m <= 0; reg_n <= 0; expected_count <= 25;
             gen_total_mats <= 0; gen_curr_cnt <= 0;
-            timeout_cnt <= 0;
         end
         else if (w_en_input) begin
-            w_input_we <= 0;       
+            w_input_we <= 0;
             w_dims_valid <= 0;     
             w_id_valid <= 0;
             w_rx_done <= 0;
 
-            if (w_input_we) w_input_addr <= w_input_addr + 1;//调了一个bug，把地址更新逻辑调成全局，只有上一拍w_input_we是1才更新，避免第一个地址就是1
-
-            if (state != S_USER_INPUT || rx_pulse) timeout_cnt <= 0;
-            else if (state == S_USER_INPUT && timeout_cnt < TIMEOUT_VAL) timeout_cnt <= timeout_cnt + 1;
+            if (w_input_we) w_input_addr <= w_input_addr + 1;
 
             case (state)
                 S_RX_M: begin
                     if (rx_pulse) begin
                         if (is_digit) begin
-                            w_error_flag <= 0; // 重试输入数字时灭灯
+                            w_error_flag <= 0; // 输入正确，清除错误
                             current_value <= current_value * 10 + (rx_data - ASC_0);
                         end
                         else if (is_delimiter) begin
@@ -216,18 +184,16 @@ module Input_Subsystem (
                                 w_input_id_val <= current_value;
                                 w_id_valid <= 1;
                             end else begin
-                                if (current_value < 1 || current_value > 5) begin
-                                    w_error_flag <= 1; // 报错
-                                    // Stage 2 会保持在 S_RX_M
-                                end else begin
+                                if (current_value < 1 || current_value > 5) w_error_flag <= 1; // 范围错误
+                                else begin
                                     reg_m <= current_value;
-                                    w_error_flag <= 0; 
+                                    w_error_flag <= 0;
                                 end
                             end
-                            current_value <= 0; 
+                            current_value <= 0;
                         end
                         else begin 
-                            w_error_flag <= 1; // 非法字符
+                            w_error_flag <= 1; // 非法字符 -> 报错/倒计时
                             current_value <= 0;
                         end
                     end
@@ -235,24 +201,27 @@ module Input_Subsystem (
 
                 S_RX_N: begin
                     if (rx_pulse) begin
-                        if (is_digit) current_value <= current_value * 10 + (rx_data - ASC_0);
+                        if (is_digit) begin 
+                            w_error_flag <= 0; 
+                            current_value <= current_value * 10 + (rx_data - ASC_0);
+                        end
                         else if (is_delimiter) begin
                             if (current_value < 1 || current_value > 5) begin
-                                w_error_flag <= 1; // 报错，Stage 2 将跳回 S_RX_M
+                                w_error_flag <= 1; // 范围错误
                                 current_value <= 0;
                             end else begin
                                 reg_n <= current_value;
                                 expected_count <= reg_m * current_value;
-                                if (w_task_mode == 1) w_dims_valid <= 1; 
+                                if (w_task_mode == 1) w_dims_valid <= 1;
                                 else begin
-                                    gen_total_mats <= 1; 
-                                    gen_curr_cnt <= 0;
+                                    gen_total_mats <= 1; gen_curr_cnt <= 0;
                                 end
+                                w_error_flag <= 0;
                                 current_value <= 0;
                             end
                         end
                         else begin
-                            w_error_flag <= 1; // 非法字符，Stage 2 将跳回 S_RX_M
+                            w_error_flag <= 1; // 非法字符
                             current_value <= 0;
                         end
                     end
@@ -260,48 +229,53 @@ module Input_Subsystem (
 
                 S_RX_COUNT: begin
                     if (rx_pulse) begin
-                        if (is_digit) current_value <= current_value * 10 + (rx_data - ASC_0);
+                        if (is_digit) begin
+                            w_error_flag <= 0;
+                            current_value <= current_value * 10 + (rx_data - ASC_0);
+                        end
                         else if (is_delimiter) begin
                             if (current_value < 1 || current_value > 2) begin
-                                w_error_flag <= 1; // 报错，跳回 S_RX_M
+                                w_error_flag <= 1;
                                 current_value <= 0;
                             end else begin
                                 gen_total_mats <= current_value;
                                 gen_curr_cnt <= 0;
+                                w_error_flag <= 0;
                                 current_value <= 0;
                             end
                         end
                         else begin
-                            w_error_flag <= 1; 
+                            w_error_flag <= 1;
                             current_value <= 0;
                         end
                     end
                 end
 
                 S_WAIT_ADDR: begin
-                    // 看到 Ready 就立刻撤销 Valid
                     if (w_addr_ready) begin
-                        w_dims_valid <= 0; // 撤销请求
-                        w_input_addr <= 0; 
+                        w_dims_valid <= 0;
+                        w_input_addr <= 0;
                     end else begin
-                        w_dims_valid <= 1; // 维持请求
+                        w_dims_valid <= 1;
                     end
                 end
 
-                S_PRE_CLEAR: begin //预先清零
-                    if (w_input_addr < expected_count-1) begin//这里用一个魔数，因为不用的话会多清一个0
+                S_PRE_CLEAR: begin 
+                    if (w_input_addr < expected_count-1) begin
                         w_input_we <= 1;
                         w_input_data <= 0;
                     end else begin
-                        w_input_addr <= 0; 
+                        w_input_addr <= 0;
                     end
                 end
 
                 S_USER_INPUT: begin
                     if (rx_pulse) begin
                         if (is_digit) begin
+                            // 输入数字，先假设是修正行为，清除错误
+                            w_error_flag <= 0; 
                             if (current_value * 10 + (rx_data - ASC_0) > 9) begin
-                                w_error_flag <= 1; // 实时数值越界，跳回 S_RX_M
+                                w_error_flag <= 1; // 可是越界了，还是报错
                                 current_value <= 0;
                             end else begin
                                 current_value <= current_value * 10 + (rx_data - ASC_0);
@@ -309,17 +283,18 @@ module Input_Subsystem (
                         end
                         else if (is_delimiter) begin
                             if (current_value > 9) begin
-                                w_error_flag <= 1; // 数值确认越界，跳回 S_RX_M
+                                w_error_flag <= 1; // 确认越界
                                 current_value <= 0;
                             end
                             else if (w_input_addr < expected_count) begin
                                 w_input_data <= current_value;
                                 w_input_we <= 1;
+                                w_error_flag <= 0; // 成功写入，清除错误
                                 current_value <= 0;
                             end
                         end
                         else begin 
-                            w_error_flag <= 1; // 非法字符，跳回 S_RX_M
+                            w_error_flag <= 1; // 非法字符，触发倒计时
                             current_value <= 0;
                         end
                     end
@@ -334,13 +309,11 @@ module Input_Subsystem (
                     end
                 end
 
-                S_DONE: begin
-                    w_rx_done <= 1;
-                end
+                S_GEN_WAIT: w_input_we <= 0;
+                S_DONE: w_rx_done <= 1;
             endcase
         end
         else begin 
-            // Disable 时复位
             w_rx_done <= 0;
             current_value <= 0;
             w_input_addr <= 0;
