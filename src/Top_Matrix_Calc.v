@@ -1,6 +1,5 @@
 module Top_Module (
     input wire clk,
-    input wire sys_rst,
 
     // --- 物理接口 (对应 XDC 约束) ---
     input wire uart_rx,      // 串口接收
@@ -82,7 +81,7 @@ module Top_Module (
     wire w_seg_mode;
 
     wire rst_n;
-    assign rst_n = ~sys_rst;
+    assign rst_n = ~btn[4];
 
     // =========================================================================
     // 2. 辅助逻辑: 定时器控制与显示模式
