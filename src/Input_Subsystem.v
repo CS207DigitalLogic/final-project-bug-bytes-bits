@@ -162,6 +162,7 @@ module Input_Subsystem (
                     if (is_delimiter) begin
                         if (current_value > 9) next_state = S_RX_M; 
                         else if (w_input_addr + 1 >= expected_count) next_state = S_DONE;
+                        else if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_DONE;
                     end
                     else if (!is_digit) next_state = S_RX_M; 
                 end

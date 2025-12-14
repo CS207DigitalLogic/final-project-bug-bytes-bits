@@ -17,6 +17,7 @@ module FSM_Controller (
     input wire [31:0] i_dim_n,
     input wire w_rx_done,     
     input wire w_error_flag,  
+    input wire w_timeout,
     
     input wire [31:0] i_input_id_val, 
     input wire w_id_valid,            
@@ -268,6 +269,7 @@ module FSM_Controller (
             // 完成后跳转至 S_WAIT_DECISION
             S_INPUT_MODE, S_GEN_MODE: begin
                 if (w_rx_done) next_state = S_WAIT_DECISION;
+                else if (w_timeout) next_state = S_ERROR;
             end
 
             S_MENU_DISP_GET_DIM: begin

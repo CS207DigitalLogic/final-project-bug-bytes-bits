@@ -94,16 +94,23 @@ module Top_Module (
 
     // A. 生成 Timer 启动脉冲 (当 FSM 进入 S_ERROR 状态的瞬间)
     reg [3:0] state_d;
-    always @(posedge clk) state_d <= w_state;
-    assign w_timer_start_pulse = (w_state == S_ERROR) && (state_d != S_ERROR);
+    reg w_input_error_d;
+    always @(posedge clk) begin
+        state_d <= w_state;
+        w_input_error_d <= w_input_error; // 打一拍
+    end
+    // 启动条件：(进入 S_ERROR 状态瞬间) OR (输入错误刚发生的瞬间)
+    assign w_timer_start_pulse = ((w_state == S_ERROR) && (state_d != S_ERROR)) || 
+                                 (w_input_error && !w_input_error_d);
 
     // B. 数码管控制逻辑
-    // 在计算模式(3~11) 或 错误模式(15) 时点亮
-    assign w_seg_en = ((w_state >= S_CALC_START && w_state <= S_CALC_END) || (w_state == S_ERROR));
+    // 启用条件：(计算模式) OR (S_ERROR) OR (正在发生输入错误)
+    assign w_seg_en = ((w_state >= S_CALC_START && w_state <= S_CALC_END) || 
+                       (w_state == S_ERROR) || 
+                       (w_input_error)); // 【修改】输入错的时候也要亮
     
     // 显示模式: 1=数字(Timer) 当处于 S_ERROR; 0=符号(OpCode) 其他情况
-    assign w_seg_mode = (w_state == S_ERROR) ? 1'b1 : 1'b0;
-
+    assign w_seg_mode = ((w_state == S_ERROR) || (w_input_error)) ? 1'b1 : 1'b0;
     // =========================================================================
     // 3. 模块例化
     // =========================================================================
@@ -115,7 +122,7 @@ module Top_Module (
         
         // Input
         .w_dims_valid(w_dims_valid), .i_dim_m(w_dim_m), .i_dim_n(w_dim_n),
-        .w_rx_done(w_input_rx_done), .w_error_flag(w_input_error),
+        .w_rx_done(w_input_rx_done), .w_error_flag(w_input_error),.w_timeout(w_timeout),
         .i_input_id_val(w_input_id_val), .w_id_valid(w_id_valid),
         .w_en_input(w_en_input), .w_is_gen_mode(w_is_gen_mode),
         .w_task_mode(w_task_mode), .w_addr_ready(w_addr_ready),
@@ -209,8 +216,7 @@ module Top_Module (
     ) u_timer (
         .clk(clk), .rst_n(rst_n),
         .i_start_timer(w_timer_start_pulse), // 进入 ERROR 瞬间重置
-        .i_en(w_state == S_ERROR),           // 在 ERROR 状态下持续运行
-        .sw(sw[3:0]),                        // 假设使用开关[3:0]设定时间，或者默认10
+        .i_en((w_state == S_ERROR) || w_input_error),        .sw(4'd10),                       
         .w_timeout(w_timeout),
         .w_time_val(w_timer_val)
     );

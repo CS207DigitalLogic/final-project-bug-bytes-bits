@@ -97,11 +97,11 @@ module Seg7_Driver (
             endcase
         end else begin
             if (i_digit_val>=10) begin
-                decode_out[0]=get_seg_code(i_digit_val - 10);
-                decode_out[1]=get_seg_code(4'd1);
+                decode_out[0]=get_seg_code(4'd1);             
+                decode_out[1]=get_seg_code(i_digit_val - 10);
             end else begin
-                decode_out[0]=get_seg_code(i_digit_val);
-                decode_out[1]=SEG_OFF;
+                decode_out[0]=SEG_OFF;
+                decode_out[1]=get_seg_code(i_digit_val);
             end
             decode_out[2]=SEG_OFF;
             decode_out[3]=SEG_OFF;
