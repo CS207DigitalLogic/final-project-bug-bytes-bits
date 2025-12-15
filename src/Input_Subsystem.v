@@ -282,6 +282,10 @@ module Input_Subsystem (
                             end
                         end
                         else if (is_delimiter) begin
+                            if (w_error_flag) begin
+                                w_error_flag <= 1; // 保持报错
+                                // current_value 已经是 0 了，不用动，也不写入
+                            end
                             if (current_value > 9) begin
                                 w_error_flag <= 1; // 确认越界
                                 current_value <= 0;

@@ -218,7 +218,7 @@ module Top_Module (
     ) u_timer (
         .clk(clk), .rst_n(rst_n),
         .i_start_timer(w_timer_start_pulse), 
-        // 【修正】使能条件：仅在 ERROR 状态或发生错误时启用
+        // 使能条件：仅在 ERROR 状态或发生错误时启用
         .i_en((w_state == S_ERROR) || w_input_error || w_logic_error), 
         .sw(4'd10), 
         .w_timeout(w_timeout),
