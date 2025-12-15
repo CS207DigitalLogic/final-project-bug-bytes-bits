@@ -2,15 +2,15 @@ module Top_Module (
     input wire clk,
 
     // --- 物理接口 ---
-    input wire uart_rx,      // 串口接收
-    output wire uart_tx,     // 串口发送
+    input wire uart_rx,      
+    output wire uart_tx,     
     
-    input wire [7:0] sw,     // 拨码开关
-    input wire [4:0] btn,    // 按键: [0]确认
-    output wire [7:0] led,   // LED 指示灯
+    input wire [7:0] sw,     
+    input wire [4:0] btn,    
+    output wire [7:0] led,   
     
-    output wire [7:0] seg,   // 数码管段选
-    output wire [3:0] an     // 数码管位选
+    output wire [7:0] seg,   
+    output wire [3:0] an     
 );
 
     // =========================================================================
@@ -33,11 +33,11 @@ module Top_Module (
     wire [7:0] w_op1_addr, w_op2_addr, w_res_addr;
     wire [31:0] w_op1_m, w_op1_n, w_op2_m, w_op2_n;
     
-    wire [4:0] w_state; // FSM 当前状态
+    wire [4:0] w_state; 
 
     // --- Input Subsystem 信号 ---
     wire w_input_rx_done;
-    wire w_input_error;
+    wire w_input_error;  // 输入格式错误标志
     wire w_dims_valid;
     wire [31:0] w_dim_m, w_dim_n;
     wire w_id_valid;
@@ -74,6 +74,8 @@ module Top_Module (
     wire w_timer_start_pulse;
     wire w_seg_en;
     wire w_seg_mode;
+    
+    wire w_logic_error; // FSM 逻辑错误标志
 
     wire rst_n;
     assign rst_n = ~btn[4];
@@ -82,8 +84,6 @@ module Top_Module (
     // 2. 辅助逻辑: 定时器控制与显示模式
     // =========================================================================
     
-    // 状态机状态定义 (必须与 FSM_Controller 保持一致)
-    localparam S_INPUT_MODE = 5'd1;  
     localparam S_CALC_START = 5'd3;  
     localparam S_CALC_END   = 5'd11; 
     localparam S_ERROR      = 5'd15; 
@@ -92,50 +92,57 @@ module Top_Module (
     reg [4:0] state_d;
     reg w_input_error_d;
     reg w_logic_error_d;
+
     always @(posedge clk) begin
         state_d <= w_state;
         w_input_error_d <= w_input_error;
         w_logic_error_d <= w_logic_error;
     end
 
+    // 启动条件仅包含：
+    // 1. 进入 S_ERROR 瞬间
+    // 2. 发生 Input 错误瞬间 (非法字符)
+    // 3. 发生 Logic 错误瞬间 (ID不对/维度不对)
     assign w_timer_start_pulse = ((w_state == S_ERROR) && (state_d != S_ERROR)) ||
-                                 ((w_state == S_INPUT_MODE) && (state_d != S_INPUT_MODE)) || 
                                  (w_input_error && !w_input_error_d) ||
-                                 (w_logic_error && !w_logic_error_d); // 【新增】
+                                 (w_logic_error && !w_logic_error_d);
 
-    // 数码管使能
+    // B. 数码管控制逻辑
+    // 启用条件：
+    // 1. 计算期间 (OpCode)
+    // 2. 错误状态 (S_ERROR)
+    // 3. 正在发生 Input 错误 (倒计时)
+    // 4. 正在发生 Logic 错误 (倒计时)
+    // *正常输入时* 数码管是不亮的
     assign w_seg_en = ((w_state >= S_CALC_START && w_state <= S_CALC_END) || 
                        (w_state == S_ERROR) || 
-                       (w_state == S_INPUT_MODE) || 
                        (w_input_error) || 
-                       (w_logic_error)); // 【新增】
-
-    // 数码管显示模式：1=倒计时, 0=OpCode
-    // 倒计时显示条件：ERROR状态 OR 输入模式 OR Input错 OR Logic错
+                       (w_logic_error));
+    
+    // 显示模式: 
+    // 1 = 数字倒计时 -> 适用于 ERROR 或 出错纠正时
+    // 0 = 符号 (OpCode) -> 适用于计算过程
     assign w_seg_mode = ((w_state == S_ERROR) || 
-                         (w_state == S_INPUT_MODE) || 
                          (w_input_error) || 
-                         (w_logic_error)) ? 1'b1 : 1'b0; // 【新增】
+                         (w_logic_error)) ? 1'b1 : 1'b0;
 
     // =========================================================================
     // 3. 模块例化
     // =========================================================================
 
-    // --- A. 主控状态机 ---
     FSM_Controller u_fsm (
         .clk(clk), .rst_n(rst_n),
         .sw(sw), .btn(btn), .led(led),
         
         .w_dims_valid(w_dims_valid), .i_dim_m(w_dim_m), .i_dim_n(w_dim_n),
         .w_rx_done(w_input_rx_done), .w_error_flag(w_input_error), 
-        .w_timeout(w_timeout),
+        .w_timeout(w_timeout), 
         
         .i_input_id_val(w_input_id_val), .w_id_valid(w_id_valid),
         .w_en_input(w_en_input), .w_is_gen_mode(w_is_gen_mode),
         .w_task_mode(w_task_mode), .w_addr_ready(w_addr_ready),
         .w_base_addr_to_input(w_base_addr_to_input),
         
-        // ... Display ...
         .w_disp_done(w_disp_done), .i_disp_lut_idx_req(w_disp_lut_idx_req),
         .w_en_display(w_en_display), .w_disp_mode(w_disp_mode),
         .w_disp_base_addr(w_disp_base_addr), .w_disp_total_cnt(w_disp_total_cnt),
@@ -144,7 +151,6 @@ module Top_Module (
         .w_system_total_count(w_sys_total_cnt), .w_system_types_count(w_sys_types_count),
         .w_disp_target_addr(w_disp_target_addr),
         
-        // ... Calc ...
         .w_calc_done(w_calc_done), .w_start_calc(w_start_calc),
         .w_op_code(w_op_code),
         .w_op1_addr(w_op1_addr), .w_op2_addr(w_op2_addr), .w_res_addr(w_res_addr),
@@ -152,10 +158,9 @@ module Top_Module (
         .w_op2_m(w_op2_m), .w_op2_n(w_op2_n),
         
         .w_state(w_state),
-        .w_logic_error(w_logic_error) // 【新增】连接 FSM 输出的逻辑错误标志
+        .w_logic_error(w_logic_error) 
     );
 
-    // --- B. 输入子系统 ---
     Input_Subsystem u_input (
         .clk(clk), .rst_n(rst_n), .uart_rx(uart_rx),
         .w_en_input(w_en_input),
@@ -167,7 +172,6 @@ module Top_Module (
         .w_input_id_val(w_input_id_val), .w_id_valid(w_id_valid)
     );
 
-    // --- C. 显示子系统 ---
     Display_Subsystem u_display (
         .clk(clk), .rst_n(rst_n),
         .w_en_display(w_en_display), .w_disp_mode(w_disp_mode),
@@ -180,7 +184,6 @@ module Top_Module (
         .uart_tx_pin(uart_tx), .w_disp_done(w_disp_done)
     );
 
-    // --- D. 计算核心 ---
     Calculator_Core u_calc (
         .clk(clk), .rst_n(rst_n),
         .i_start_calc(w_start_calc), .i_op_code(w_op_code), .o_calc_done(w_calc_done),
@@ -192,7 +195,6 @@ module Top_Module (
         .o_calc_we(w_calc_we), .o_calc_waddr(w_calc_waddr), .o_calc_wdata(w_calc_wdata)
     );
 
-    // --- E. 存储仲裁器 ---
     Storage_Mux u_mux (
         .i_en_input(w_en_input), .i_en_display(w_en_display), .i_en_calc(w_start_calc),
         .i_input_addr(w_input_addr), .i_input_data(w_input_data), .i_input_we(w_input_we),
@@ -203,7 +205,6 @@ module Top_Module (
         .o_storage_addr(w_storage_addr), .o_storage_data(w_storage_wdata), .o_storage_we(w_storage_we)
     );
 
-    // --- F. 存储器 ---
     Matrix_storage u_storage (
         .clk(clk),
         .w_storage_we(w_storage_we),
@@ -212,20 +213,18 @@ module Top_Module (
         .w_storage_out(w_storage_rdata)
     );
 
-    // --- G. 倒计时定时器 ---
     Timer_Unit #(
         .CLK_FREQ(100_000_000)
     ) u_timer (
         .clk(clk), .rst_n(rst_n),
         .i_start_timer(w_timer_start_pulse), 
-        // 使能条件：在错误状态、输入模式、或任何报错情况下
-        .i_en((w_state == S_ERROR) || (w_state == S_INPUT_MODE) || w_input_error || w_logic_error), 
+        // 【修正】使能条件：仅在 ERROR 状态或发生错误时启用
+        .i_en((w_state == S_ERROR) || w_input_error || w_logic_error), 
         .sw(4'd10), 
         .w_timeout(w_timeout),
         .w_time_val(w_timer_val)
     );
 
-    // --- H. 数码管驱动 ---
     Seg7_Driver u_seg (
         .clk(clk), .rst_n(rst_n),
         .i_en(w_seg_en),           

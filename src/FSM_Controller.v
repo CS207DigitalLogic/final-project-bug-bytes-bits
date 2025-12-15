@@ -245,7 +245,7 @@ module FSM_Controller (
             end
 
             S_CALC_GET_DIM: begin
-                // 【修改】在此处检查超时，如果用户一直不输或输错多次导致超时
+                // 在此处检查超时，如果用户一直不输或输错多次导致超时
                 if (w_timeout) next_state = S_ERROR;
                 else if (w_dims_valid) next_state = S_CALC_FILTER;
             end
@@ -256,14 +256,14 @@ module FSM_Controller (
             end
 
             S_CALC_SHOW_LIST: begin
-                // 【修改】如果查不到矩阵 (Logic Error)：
+                // 如果查不到矩阵 (Logic Error)：
                 // 不要跳 S_ERROR，而是跳回 S_CALC_GET_DIM 允许重输
                 if (r_hit_found == 0) next_state = S_CALC_GET_DIM;
                 else if (w_disp_done) next_state = S_CALC_GET_ID;
             end
 
             S_CALC_GET_ID: begin
-                // 【修改】在此处检查超时
+                // 在此处检查超时
                 if (w_timeout) next_state = S_ERROR;
                 else if (w_id_valid) begin
                     // 如果 ID 合法，继续
