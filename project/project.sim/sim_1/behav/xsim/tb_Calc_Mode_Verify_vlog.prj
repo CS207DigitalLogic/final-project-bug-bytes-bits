@@ -1,0 +1,17 @@
+# compile verilog/system verilog design source files
+verilog xil_defaultlib  \
+"../../../../../src/Calculator_Core.v" \
+"../../../../../src/Display_Subsystem.v" \
+"../../../../../src/FSM_Controller.v" \
+"../../../../../src/Input_Subsystem.v" \
+"../../../../../src/Matrix_Storage.v" \
+"../../../../../src/Storage_MUX.v" \
+"../../../../../src/uart_rx.v" \
+"../../../../../src/uart_tx.v" \
+"../../../../../sim/tb_Calc_Mode_Verify.v" \
+
+# compile glbl module
+verilog xil_defaultlib "glbl.v"
+
+# Do not sort compile order
+nosort
