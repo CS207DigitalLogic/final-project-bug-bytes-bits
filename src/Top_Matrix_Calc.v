@@ -1,5 +1,5 @@
 module Top_Module (
-    input wire clk,
+    input wire clk1,
 
     // --- 物理接口 ---
     input wire uart_rx,      
@@ -79,6 +79,10 @@ module Top_Module (
 
     wire rst_n;
     assign rst_n = ~btn[4];
+
+    wire clk;
+
+    clk_div u_clk(.clk(clk1), .rst_n(rst_n), .clk_out(clk));
 
     // =========================================================================
     // 2. 辅助逻辑: 定时器控制与显示模式
@@ -206,7 +210,7 @@ module Top_Module (
     );
 
     Timer_Unit #(
-        .CLK_FREQ(100_000_000)
+        .CLK_FREQ(25_000_000)
     ) u_timer (
         .clk(clk), .rst_n(rst_n),
         .i_start_timer(w_timer_start_pulse), 

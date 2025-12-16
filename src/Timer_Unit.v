@@ -1,5 +1,5 @@
 module Timer_Unit #(
-    parameter CLK_FREQ = 100_000_000 // 系统时钟频率
+    parameter CLK_FREQ = 25_000_000 // 系统时钟频率
 )(
     input wire clk,
     input wire rst_n,
