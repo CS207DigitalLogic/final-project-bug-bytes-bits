@@ -5,13 +5,13 @@ module Input_Subsystem (
     input wire rst_n, 
     input wire uart_rx, 
     input wire w_en_input, 
-    input wire [7:0] w_base_addr,      
+    input wire [8:0] w_base_addr,      
     input wire w_addr_ready,          
     input wire w_is_gen_mode,         
     input wire [1:0] w_task_mode, 
 
     output reg w_input_we, 
-    output wire [7:0] w_real_addr, 
+    output wire [8:0] w_real_addr, 
     output reg [31:0] w_input_data, 
     output reg w_rx_done,         
     output reg w_error_flag, // 1=输入有误(开启外部倒计时)，0=正常
@@ -41,7 +41,7 @@ module Input_Subsystem (
     reg [3:0] state, next_state;
     reg [31:0] current_value;
     reg [31:0] reg_m, reg_n, expected_count;
-    reg [7:0]  w_input_addr; 
+    reg [8:0]  w_input_addr; 
     
     reg [31:0] gen_total_mats;
     reg [31:0] gen_curr_cnt;

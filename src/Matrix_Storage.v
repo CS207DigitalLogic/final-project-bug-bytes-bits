@@ -2,7 +2,7 @@ module Matrix_storage (
     input clk,
     input w_storage_we,
     input [31:0] w_storage_data,
-    input [7:0] w_storage_addr,
+    input [8:0] w_storage_addr,
     output [31:0] w_storage_out
 );
 

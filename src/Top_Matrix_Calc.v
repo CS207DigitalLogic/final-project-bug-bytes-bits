@@ -22,15 +22,15 @@ module Top_Module (
     wire w_is_gen_mode;
     wire [1:0] w_task_mode;
     wire w_addr_ready;
-    wire [7:0] w_base_addr_to_input;
+    wire [8:0] w_base_addr_to_input;
     wire [1:0] w_disp_mode;
-    wire [7:0] w_disp_base_addr;
+    wire [8:0] w_disp_base_addr;
     wire [1:0] w_disp_total_cnt;
     wire [31:0] w_disp_m, w_disp_n;
     wire [1:0] w_disp_selected_id;
-    wire [7:0] w_disp_target_addr;
+    wire [8:0] w_disp_target_addr;
     wire [2:0] w_op_code;
-    wire [7:0] w_op1_addr, w_op2_addr, w_res_addr;
+    wire [8:0] w_op1_addr, w_op2_addr, w_res_addr;
     wire [31:0] w_op1_m, w_op1_n, w_op2_m, w_op2_n;
     
     wire [4:0] w_state; 
@@ -51,19 +51,19 @@ module Top_Module (
 
     // --- Calculator Core 信号 ---
     wire w_calc_done;
-    wire [7:0] w_calc_req_addr;
-    wire [7:0] w_calc_waddr;
+    wire [8:0] w_calc_req_addr;
+    wire [8:0] w_calc_waddr;
     wire [31:0] w_calc_wdata;
     wire w_calc_we;
-    wire [7:0] w_calc_addr_merged;
+    wire [8:0] w_calc_addr_merged;
     assign w_calc_addr_merged = (w_calc_we) ? w_calc_waddr : w_calc_req_addr;
 
     // --- Storage MUX & Memory 信号 ---
-    wire [7:0] w_input_addr;
+    wire [8:0] w_input_addr;
     wire [31:0] w_input_data;
     wire w_input_we;
-    wire [7:0] w_disp_req_addr;
-    wire [7:0] w_storage_addr;
+    wire [8:0] w_disp_req_addr;
+    wire [8:0] w_storage_addr;
     wire [31:0] w_storage_wdata;
     wire w_storage_we;
     wire [31:0] w_storage_rdata;

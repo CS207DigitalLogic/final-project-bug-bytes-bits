@@ -22,7 +22,7 @@ module FSM_Controller (
     output reg w_is_gen_mode, 
     output reg [1:0] w_task_mode, 
     output reg w_addr_ready,  
-    output reg [7:0] w_base_addr_to_input, 
+    output reg [8:0] w_base_addr_to_input, 
 
     // --- Display Subsystem ---
     input wire w_disp_done,           
@@ -30,7 +30,7 @@ module FSM_Controller (
     
     output reg w_en_display,          
     output reg [1:0] w_disp_mode,     
-    output reg [7:0] w_disp_base_addr,
+    output reg [8:0] w_disp_base_addr,
     output reg [1:0] w_disp_total_cnt,
     output reg [31:0] w_disp_m,       
     output reg [31:0] w_disp_n,       
@@ -38,19 +38,19 @@ module FSM_Controller (
     
     output wire [7:0] w_system_total_count, 
     output wire [4:0] w_system_types_count,
-    output reg [7:0] w_disp_target_addr, 
+    output reg [8:0] w_disp_target_addr, 
 
     // --- Calculator Core ---
     input wire w_calc_done,       
     output reg w_start_calc,      
     output reg [2:0] w_op_code,  
-    output reg [7:0] w_op1_addr,  
-    output reg [7:0] w_op2_addr,  
+    output reg [8:0] w_op1_addr,  
+    output reg [8:0] w_op2_addr,  
     output reg [31:0] w_op1_m,
     output reg [31:0] w_op1_n,
     output reg [31:0] w_op2_m,
     output reg [31:0] w_op2_n,
-    output reg [7:0] w_res_addr,  
+    output reg [8:0] w_res_addr,  
     
     output wire [4:0] w_state,
     output reg w_logic_error 
@@ -85,11 +85,11 @@ module FSM_Controller (
     // MMU 账本
     reg [31:0] lut_m [0:MAX_TYPES-1];
     reg [31:0] lut_n [0:MAX_TYPES-1];
-    reg [7:0]  lut_start_addr [0:MAX_TYPES-1];
+    reg [8:0]  lut_start_addr [0:MAX_TYPES-1];
     reg        lut_idx [0:MAX_TYPES-1];
     reg [1:0]  lut_valid_cnt [0:MAX_TYPES-1];
     reg [4:0]  lut_count;
-    reg [7:0]  free_ptr;
+    reg [8:0]  free_ptr;
 
     // 上下文
     reg [2:0] r_op_code;
@@ -101,7 +101,7 @@ module FSM_Controller (
     
     reg [31:0] r_scalar_val; // 标量寄存器
 
-    reg [7:0]  r_op1_addr, r_op2_addr;
+    reg [8:0]  r_op1_addr, r_op2_addr;
     reg [31:0] r_op1_m, r_op1_n; 
     reg [31:0] r_op2_m, r_op2_n; 
     reg [31:0] r_res_m, r_res_n;
@@ -125,7 +125,7 @@ module FSM_Controller (
     // =========================================================================
     reg       calc_match_found;
     reg [4:0] calc_match_index;
-    reg [7:0] calc_final_addr;
+    reg [8:0] calc_final_addr;
     reg [7:0] single_mat_size;
     integer i;
     reg [31:0] calc_pred_m, calc_pred_n;

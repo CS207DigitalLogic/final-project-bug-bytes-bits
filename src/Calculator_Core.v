@@ -9,23 +9,23 @@ module Calculator_Core (
 
     // --- 操作数参数 (来自 FSM) ---
     // 操作数 1
-    input wire [7:0]  i_op1_addr,   // 存储器基地址
+    input wire [8:0]  i_op1_addr,   // 存储器基地址
     input wire [31:0] i_op1_m,      // 行数
     input wire [31:0] i_op1_n,      // 列数
     // 操作数 2
-    input wire [7:0]  i_op2_addr,
+    input wire [8:0]  i_op2_addr,
     input wire [31:0] i_op2_m,      // 标量乘法下为标量
     input wire [31:0] i_op2_n,
     // 结果存放位置
-    input wire [7:0]  i_res_addr,   
+    input wire [8:0]  i_res_addr,   
 
     // --- Storage 读接口 (直接连 Matrix_Storage 的读端口) ---
-    output reg [7:0]  o_calc_req_addr, // 读地址请求
+    output reg [8:0]  o_calc_req_addr, // 读地址请求
     input wire [31:0] i_storage_rdata, // 读回的数据
 
     // --- Storage 写接口 (连 Storage_Mux) ---
     output reg        o_calc_we,       // 写使能
-    output reg [7:0]  o_calc_waddr,    // 写地址
+    output reg [8:0]  o_calc_waddr,    // 写地址
     output reg [31:0] o_calc_wdata     // 写数据
 );
 

@@ -10,22 +10,22 @@ module Storage_Mux (
     // 2. 各子模块接口 (Inputs)
     // =======================================
     // Input Subsystem
-    input wire [7:0]  i_input_addr, // 对应 w_real_addr
+    input wire [8:0]  i_input_addr, // 对应 w_real_addr
     input wire [31:0] i_input_data, // 对应 w_input_data
     input wire        i_input_we,   // 对应 w_input_we
 
     // Display Subsystem (只读，无写信号)
-    input wire [7:0]  i_disp_addr,  // 对应 w_disp_req_addr
+    input wire [8:0]  i_disp_addr,  // 对应 w_disp_req_addr
 
     // Calculator Core
-    input wire [7:0]  i_calc_addr,  // 对应 w_calc_addr
+    input wire [8:0]  i_calc_addr,  // 对应 w_calc_addr
     input wire [31:0] i_calc_data,  // 对应 w_calc_data
     input wire        i_calc_we,    // 对应 w_calc_we
 
     // =======================================
     // 3. 输出到 Storage (Outputs)
     // =======================================
-    output reg [7:0]  o_storage_addr,
+    output reg [8:0]  o_storage_addr,
     output reg [31:0] o_storage_data,
     output reg        o_storage_we
 );
