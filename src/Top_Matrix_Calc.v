@@ -45,9 +45,9 @@ module Top_Module (
     
     // --- Display Subsystem 信号 ---
     wire w_disp_done;
-    wire [3:0] w_disp_lut_idx_req;
+    wire [4:0] w_disp_lut_idx_req;
     wire [7:0] w_sys_total_cnt;    
-    wire [2:0] w_sys_types_count;  
+    wire [4:0] w_sys_types_count;  
 
     // --- Calculator Core 信号 ---
     wire w_calc_done;

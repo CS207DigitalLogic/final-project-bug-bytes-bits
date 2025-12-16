@@ -18,8 +18,8 @@ module Display_Subsystem (
 
     // 汇总模式接口
     input wire [7:0] i_system_total_count, // 系统总共有多少个矩阵
-    input wire [2:0] i_system_types_count, // 系统总共有几种规格
-    output reg [3:0] o_lut_idx_req,        // 告诉 FSM 我现在想看第几个规格的数据
+    input wire [4:0] i_system_types_count, // 系统总共有几种规格
+    output reg [4:0] o_lut_idx_req,        // 告诉 FSM 我现在想看第几个规格的数据
 
     // --- Storage 交互接口 ---
     input wire [31:0] w_storage_rdata, // 读回的数据

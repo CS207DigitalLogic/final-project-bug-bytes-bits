@@ -26,7 +26,7 @@ module FSM_Controller (
 
     // --- Display Subsystem ---
     input wire w_disp_done,           
-    input wire [3:0] i_disp_lut_idx_req, 
+    input wire [4:0] i_disp_lut_idx_req, 
     
     output reg w_en_display,          
     output reg [1:0] w_disp_mode,     
@@ -37,7 +37,7 @@ module FSM_Controller (
     output reg [1:0] w_disp_selected_id, 
     
     output wire [7:0] w_system_total_count, 
-    output wire [2:0] w_system_types_count,
+    output wire [4:0] w_system_types_count,
     output reg [7:0] w_disp_target_addr, 
 
     // --- Calculator Core ---
@@ -78,7 +78,7 @@ module FSM_Controller (
     localparam S_WAIT_DECISION     = 5'd16;
     localparam S_CALC_GET_SCALAR   = 5'd17;
 
-    localparam MAX_TYPES = 4;
+    localparam MAX_TYPES = 25;
 
     reg [4:0] current_state, next_state;
     
@@ -88,14 +88,14 @@ module FSM_Controller (
     reg [7:0]  lut_start_addr [0:MAX_TYPES-1];
     reg        lut_idx [0:MAX_TYPES-1];
     reg [1:0]  lut_valid_cnt [0:MAX_TYPES-1];
-    reg [2:0]  lut_count;
+    reg [4:0]  lut_count;
     reg [7:0]  free_ptr;
 
     // 上下文
     reg [2:0] r_op_code;
     reg       r_stage;
     reg       r_target_stage;
-    reg [1:0] r_hit_type_idx; 
+    reg [4:0] r_hit_type_idx; 
     reg       r_hit_found;
     reg [1:0] r_selected_id;  
     
@@ -124,7 +124,7 @@ module FSM_Controller (
     // 0. 辅助组合逻辑 
     // =========================================================================
     reg       calc_match_found;
-    reg [2:0] calc_match_index;
+    reg [4:0] calc_match_index;
     reg [7:0] calc_final_addr;
     reg [7:0] single_mat_size;
     integer i;
@@ -162,7 +162,7 @@ module FSM_Controller (
                 if (i < lut_count) begin
                     if (lut_m[i] == search_m && lut_n[i] == search_n) begin
                         calc_match_found = 1;
-                        calc_match_index = i[2:0];
+                        calc_match_index = i[4:0];
                     end
                 end
             end
@@ -198,8 +198,16 @@ module FSM_Controller (
         end
     end
 
-    assign w_system_total_count = lut_valid_cnt[0] + lut_valid_cnt[1] + lut_valid_cnt[2] + lut_valid_cnt[3];
-    assign w_system_types_count = lut_count;
+    assign w_system_types_count = lut_count; 
+    reg [7:0] total_cnt_sum;
+    integer k;
+    always @(*) begin
+        total_cnt_sum = 0;
+        for(k=0; k<MAX_TYPES; k=k+1) begin
+            if(k < lut_count) total_cnt_sum = total_cnt_sum + lut_valid_cnt[k];
+        end
+    end
+    assign w_system_total_count = total_cnt_sum;
     assign w_state = current_state;
 
     // =========================================================================
@@ -421,7 +429,7 @@ module FSM_Controller (
                     r_hit_found <= 0; r_hit_type_idx <= 0;
                     for (i=0; i<MAX_TYPES; i=i+1) begin
                         if (i < lut_count && lut_m[i] == i_dim_m && lut_n[i] == i_dim_n && lut_valid_cnt[i] > 0) begin
-                            r_hit_found <= 1; r_hit_type_idx <= i[1:0]; 
+                            r_hit_found <= 1; r_hit_type_idx <= i[4:0]; 
                         end
                     end
                 end
