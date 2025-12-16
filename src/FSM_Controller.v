@@ -76,7 +76,6 @@ module FSM_Controller (
     localparam S_MENU_DISP_SHOW    = 5'd14;
     localparam S_ERROR             = 5'd15;
     localparam S_WAIT_DECISION     = 5'd16;
-    // 【新增】读取标量状态
     localparam S_CALC_GET_SCALAR   = 5'd17;
 
     localparam MAX_TYPES = 4;
@@ -100,8 +99,7 @@ module FSM_Controller (
     reg       r_hit_found;
     reg [1:0] r_selected_id;  
     
-    // 【新增】标量寄存器
-    reg [31:0] r_scalar_val;
+    reg [31:0] r_scalar_val; // 标量寄存器
 
     reg [7:0]  r_op1_addr, r_op2_addr;
     reg [31:0] r_op1_m, r_op1_n; 
@@ -281,7 +279,6 @@ module FSM_Controller (
                 S_CALC_SHOW_MAT: begin
                     if (w_disp_done) begin
                         if (r_stage < r_target_stage) begin
-                            // 【关键修改】如果是标量乘法 (010) 且第一阶段刚结束，跳转去读标量
                             if (r_op_code == 3'b010) next_state = S_CALC_GET_SCALAR;
                             else next_state = S_CALC_GET_DIM;
                         end
@@ -289,11 +286,10 @@ module FSM_Controller (
                     end
                 end
 
-                // 【新增】读取标量状态
+                // Stage 2：读取标量 -> 等待按键
                 S_CALC_GET_SCALAR: begin
-                    if (w_timeout) next_state = S_ERROR;
-                    else if (w_id_valid) begin
-                        // 读到数据后直接进入计算（这里只读一个数，不需要查表和确认ID）
+                    // 只要按了确认键，就直接拿数据去计算
+                    if (btn_confirm_pose) begin
                         next_state = S_CALC_EXECUTE;
                     end
                 end
@@ -325,7 +321,6 @@ module FSM_Controller (
     // =========================================================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            // 复位逻辑...
             lut_count <= 0; free_ptr <= 0;
             for(i=0; i<MAX_TYPES; i=i+1) lut_valid_cnt[i] <= 0;
             for(i=0; i<MAX_TYPES; i=i+1) lut_idx[i] <= 0;
@@ -337,7 +332,7 @@ module FSM_Controller (
             btn2_d0 <= 0; btn2_d1 <= 0; 
             r_retry_state <= S_IDLE;
             w_logic_error <= 0;
-            r_scalar_val <= 0; // 复位标量
+            r_scalar_val <= 0; 
         end 
         else begin
             w_addr_ready <= 0; w_start_calc <= 0;
@@ -360,6 +355,7 @@ module FSM_Controller (
                     end
                 end
 
+                // ... (S_INPUT_MODE ~ S_CALC_SHOW_MAT 保持不变) ...
                 S_INPUT_MODE, S_GEN_MODE: begin
                     w_en_input <= 1; w_task_mode <= 0;
                     w_is_gen_mode <= (current_state == S_GEN_MODE);
@@ -471,14 +467,17 @@ module FSM_Controller (
                     end
                 end
 
-                // 【新增】读取标量数据
                 S_CALC_GET_SCALAR: begin
-                    // 复用 Task Mode 2 (读取单个数值)
-                    w_en_input <= 1; w_task_mode <= 2; 
-                    if (w_id_valid) begin
-                        w_logic_error <= 0;
-                        r_scalar_val <= i_input_id_val; // 保存标量
-                        w_en_input <= 0;
+                    // 1. 关闭 Input 模块
+                    w_en_input <= 0; 
+                    w_logic_error <= 0;
+                    
+                    // 2. 将当前拨码开关的值显示在 LED 上供用户确认 (sw[7:4])
+                    led <= {4'b0000, sw[7:4]};
+
+                    // 3. 按下确认键时，锁存数据
+                    if (btn_confirm_pose) begin
+                        r_scalar_val <= {28'd0, sw[7:4]}; 
                     end
                 end
                 
@@ -486,10 +485,9 @@ module FSM_Controller (
                     w_start_calc <= 1; w_op_code <= r_op_code; w_res_addr <= calc_final_addr;
                     if (r_op_code == 3'b000) begin r_res_m <= r_op1_n; r_res_n <= r_op1_m; end
                     else if (r_op_code == 3'b010) begin 
-                        // 标量乘法：结果维度等于Op1，操作数2的"维度m"被借用为传输标量值
                         r_res_m <= r_op1_m; 
                         r_res_n <= r_op1_n; 
-                        w_op2_m <= r_scalar_val; // 【关键】将标量传给计算核心的 m2 端口
+                        w_op2_m <= r_scalar_val; 
                     end
                     else begin r_res_m <= r_op1_m; r_res_n <= r_op1_n; end
                     
