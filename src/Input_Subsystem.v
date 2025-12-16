@@ -59,7 +59,7 @@ module Input_Subsystem (
     assign w_dim_m = reg_m;
     assign w_dim_n = reg_n;
     
-    assign random_val = lfsr_reg[3:0] % 10;
+    assign random_val = lfsr_reg[31:0] % 10;
     always @(posedge clk) begin 
         if (!rst_n) lfsr_reg <= 32'hACE1;
         else lfsr_reg <= {lfsr_reg[30:0], lfsr_reg[31] ^ lfsr_reg[21] ^ lfsr_reg[1]};
