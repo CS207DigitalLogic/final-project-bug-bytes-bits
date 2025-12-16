@@ -37,7 +37,7 @@ module Top_Module (
 
     // --- Input Subsystem 信号 ---
     wire w_input_rx_done;
-    wire w_input_error;  // 输入格式错误标志
+    wire w_input_error;
     wire w_dims_valid;
     wire [31:0] w_dim_m, w_dim_n;
     wire w_id_valid;
@@ -75,7 +75,7 @@ module Top_Module (
     wire w_seg_en;
     wire w_seg_mode;
     
-    wire w_logic_error; // FSM 逻辑错误标志
+    wire w_logic_error; 
 
     wire rst_n;
     assign rst_n = ~btn[4];
@@ -88,7 +88,6 @@ module Top_Module (
     localparam S_CALC_END   = 5'd11; 
     localparam S_ERROR      = 5'd15; 
 
-    // A. 生成 Timer 启动脉冲
     reg [4:0] state_d;
     reg w_input_error_d;
     reg w_logic_error_d;
@@ -99,31 +98,24 @@ module Top_Module (
         w_logic_error_d <= w_logic_error;
     end
 
-    // 启动条件仅包含：
-    // 1. 进入 S_ERROR 瞬间
-    // 2. 发生 Input 错误瞬间 (非法字符)
-    // 3. 发生 Logic 错误瞬间 (ID不对/维度不对)
-    assign w_timer_start_pulse = ((w_state == S_ERROR) && (state_d != S_ERROR)) ||
-                                 (w_input_error && !w_input_error_d) ||
+    // A. Timer 启动脉冲
+    // 【修改】移除了 S_ERROR 的触发条件
+    // 只在检测到具体的错误发生瞬间（输入错误或逻辑错误）才启动倒计时
+    assign w_timer_start_pulse = (w_input_error && !w_input_error_d) ||
                                  (w_logic_error && !w_logic_error_d);
 
-    // B. 数码管控制逻辑
-    // 启用条件：
-    // 1. 计算期间 (OpCode)
-    // 2. 错误状态 (S_ERROR)
-    // 3. 正在发生 Input 错误 (倒计时)
-    // 4. 正在发生 Logic 错误 (倒计时)
-    // *正常输入时* 数码管是不亮的
+    // B. 数码管使能逻辑
+    // 【修改】
+    // 1. 移除了 S_ERROR 作为开启条件
+    // 2. 增加了 && (w_state != S_ERROR) 作为强制关闭条件
+    //    这意味着一旦进入 ERROR 状态，哪怕 w_input_error 还是 1，数码管也会强制熄灭
     assign w_seg_en = ((w_state >= S_CALC_START && w_state <= S_CALC_END) || 
-                       (w_state == S_ERROR) || 
                        (w_input_error) || 
-                       (w_logic_error));
+                       (w_logic_error)) && (w_state != S_ERROR);
     
-    // 显示模式: 
-    // 1 = 数字倒计时 -> 适用于 ERROR 或 出错纠正时
-    // 0 = 符号 (OpCode) -> 适用于计算过程
-    assign w_seg_mode = ((w_state == S_ERROR) || 
-                         (w_input_error) || 
+    // C. 显示模式
+    // 【修改】移除了 S_ERROR 的判断
+    assign w_seg_mode = ((w_input_error) || 
                          (w_logic_error)) ? 1'b1 : 1'b0;
 
     // =========================================================================
@@ -218,8 +210,10 @@ module Top_Module (
     ) u_timer (
         .clk(clk), .rst_n(rst_n),
         .i_start_timer(w_timer_start_pulse), 
-        // 使能条件：仅在 ERROR 状态或发生错误时启用
-        .i_en((w_state == S_ERROR) || w_input_error || w_logic_error), 
+        
+        // Timer 运行条件：有错误发生 且 还没死机
+        .i_en( (w_input_error || w_logic_error) && (w_state != S_ERROR) ), 
+        
         .sw(4'd10), 
         .w_timeout(w_timeout),
         .w_time_val(w_timer_val)
