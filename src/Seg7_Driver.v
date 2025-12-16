@@ -19,7 +19,7 @@ module Seg7_Driver (
     localparam SEG_OFF = 8'h00;  //[7:0]: a, b, c, d, e, f, g, dp
     localparam SEG_T = 8'h1E;
     localparam SEG_A = 8'hEE;
-    localparam SEG_B = 8'hCE;
+    localparam SEG_B = 8'hFE;
     localparam SEG_C = 8'h9C; 
     localparam SEG_E = 8'h9E; 
     
@@ -91,8 +91,8 @@ module Seg7_Driver (
             case(i_op_code)
                 3'd0: decode_out[0]=SEG_T;
                 3'd1: decode_out[0]=SEG_A;
-                3'd2: decode_out[0]=SEG_B;
-                3'd3: decode_out[0]=SEG_C;
+                3'd2: decode_out[0]=SEG_C;
+                3'd3: decode_out[0]=SEG_B;
                 default: decode_out[0]=SEG_E;
             endcase
         end else begin
