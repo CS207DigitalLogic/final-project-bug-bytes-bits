@@ -216,7 +216,7 @@ module Top_Module (
         .i_start_timer(w_timer_start_pulse), 
         
         // Timer 运行条件：有错误发生 且 还没死机
-        .i_en( (w_input_error || w_logic_error) && (w_state != S_ERROR) ), 
+        .i_en( (w_logic_error) && (w_state != S_ERROR) ), 
         
         .sw(4'd10), 
         .w_timeout(w_timeout),
