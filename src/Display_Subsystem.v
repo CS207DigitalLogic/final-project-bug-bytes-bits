@@ -42,7 +42,7 @@ module Display_Subsystem (
     assign w_tx_ready = ~tx_busy & ~w_disp_tx_en;
 
     uart_tx #(
-        .CLK_FREQ(100_000_000), 
+        .CLK_FREQ(25_000_000), 
         .BAUD_RATE(115200)
     ) u_uart_tx (
         .clk(clk),
