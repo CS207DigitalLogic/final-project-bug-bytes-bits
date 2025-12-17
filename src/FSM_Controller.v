@@ -126,7 +126,7 @@ module FSM_Controller (
     reg       calc_match_found;
     reg [4:0] calc_match_index;
     reg [8:0] calc_final_addr;
-    reg [7:0] single_mat_size;
+    reg [8:0] single_mat_size;
     integer i;
     reg [31:0] calc_pred_m, calc_pred_n;
     reg [31:0] search_m, search_n;

@@ -56,7 +56,7 @@ module Seg7_Driver (
         end
     endfunction
 
-    reg [14:0] cnt;
+    reg [12:0] cnt;
     reg [1:0] scan_cnt;
     
     reg [7:0] decode_out[0:3];

@@ -10,7 +10,7 @@ module Display_Subsystem (
     // 矩阵参数
     input wire [31:0] w_disp_m,       // 矩阵行数
     input wire [31:0] w_disp_n,       // 矩阵列数
-    input wire [7:0]  w_disp_base_addr, // 起始基地址
+    input wire [8:0]  w_disp_base_addr, // 起始基地址
     input wire [1:0]  w_disp_total_cnt, // 该规格共有几个矩阵?
 
     // 缓存回显时的选择 ID (1 或 2)
@@ -23,7 +23,7 @@ module Display_Subsystem (
 
     // --- Storage 交互接口 ---
     input wire [31:0] w_storage_rdata, // 读回的数据
-    output reg [7:0]  w_disp_req_addr, // 读地址
+    output reg [8:0]  w_disp_req_addr, // 读地址
 
     // --- UART 物理接口 ---
     output wire uart_tx_pin,          // 直接输出到 FPGA 串口引脚
