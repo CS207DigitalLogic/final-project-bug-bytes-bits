@@ -66,7 +66,7 @@ module Input_Subsystem (
     end
 
     uart_rx #(
-        .CLK_FREQ(100_000_000),
+        .CLK_FREQ(25_000_000),
         .BAUD_RATE(115200)
     ) u_uart_rx (
         .clk(clk),
@@ -300,7 +300,7 @@ module Input_Subsystem (
                 end
 
                 S_GEN_FILL: begin
-                    if (w_input_addr < expected_count -1) begin
+                    if (w_input_addr < expected_count ) begin
                         w_input_we <= 1;
                         w_input_data <= random_val;
                     end else begin
