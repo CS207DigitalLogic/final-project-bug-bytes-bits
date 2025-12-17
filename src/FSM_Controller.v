@@ -110,7 +110,13 @@ module FSM_Controller (
     // 按键消抖寄存器
     reg btn0_d0, btn0_d1;
     reg btn1_d0, btn1_d1;
-    reg btn2_d0, btn2_d1; 
+    reg btn2_d0, btn2_d1;
+
+    wire btn0_f, btn1_f, btn2_f;
+
+    button_debouncer ubtn0(.clk(clk), .rst_n(rst_n), .key_in(btn[0]), .key_flag(btn0_f));
+    button_debouncer ubtn1(.clk(clk), .rst_n(rst_n), .key_in(btn[1]), .key_flag(btn1_f));
+    button_debouncer ubtn2(.clk(clk), .rst_n(rst_n), .key_in(btn[2]), .key_flag(btn2_f));
 
     wire btn_confirm_pose;
     wire btn_retry_pose;
@@ -340,14 +346,14 @@ module FSM_Controller (
             btn2_d0 <= 0; btn2_d1 <= 0; 
             r_retry_state <= S_IDLE;
             w_logic_error <= 0;
-            r_scalar_val <= 0; 
+            r_scalar_val <= 0;
         end 
         else begin
             w_addr_ready <= 0; w_start_calc <= 0;
 
-            btn0_d0 <= btn[0]; btn0_d1 <= btn0_d0;
-            btn1_d0 <= btn[1]; btn1_d1 <= btn1_d0;
-            btn2_d0 <= btn[2]; btn2_d1 <= btn2_d0; 
+            btn0_d0 <= btn0_f; btn0_d1 <= btn0_d0;
+            btn1_d0 <= btn1_f; btn1_d1 <= btn1_d0;
+            btn2_d0 <= btn2_f; btn2_d1 <= btn2_d0; 
 
             case (current_state)
                 S_IDLE: begin

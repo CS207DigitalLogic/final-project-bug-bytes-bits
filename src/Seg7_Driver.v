@@ -19,7 +19,7 @@ module Seg7_Driver (
     localparam SEG_OFF = 8'h00;  //[7:0]: a, b, c, d, e, f, g, dp
     localparam SEG_T = 8'h1E;
     localparam SEG_A = 8'hEE;
-    localparam SEG_B = 8'h7E;
+    localparam SEG_B = 8'h3E;
     localparam SEG_C = 8'h9C; 
     localparam SEG_E = 8'h9E; 
     
