@@ -105,8 +105,7 @@ module Top_Module (
     // A. Timer 启动脉冲
     // 【修改】移除了 S_ERROR 的触发条件
     // 只在检测到具体的错误发生瞬间（输入错误或逻辑错误）才启动倒计时
-    assign w_timer_start_pulse = (w_input_error && !w_input_error_d) ||
-                                 (w_logic_error && !w_logic_error_d);
+    assign w_timer_start_pulse = (w_logic_error && !w_logic_error_d);
 
     // B. 数码管使能逻辑
     // 【修改】
@@ -114,7 +113,6 @@ module Top_Module (
     // 2. 增加了 && (w_state != S_ERROR) 作为强制关闭条件
     //    这意味着一旦进入 ERROR 状态，哪怕 w_input_error 还是 1，数码管也会强制熄灭
     assign w_seg_en = ((w_state >= S_CALC_START && w_state <= S_CALC_END) || 
-                       (w_input_error) || 
                        (w_logic_error)) && (w_state != S_ERROR);
     
     // C. 显示模式
