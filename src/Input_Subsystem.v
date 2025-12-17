@@ -94,16 +94,14 @@ module Input_Subsystem (
         case (state)
             S_RX_M: begin
                 if (rx_pulse && is_delimiter) begin
-                    if (w_task_mode == 2) next_state = S_DONE; 
-                    else if (current_value >= 1 && current_value <= 5) next_state = S_RX_N;
+                    if (current_value >= 1 && current_value <= 5) next_state = S_RX_N;
                 end
             end
 
             S_RX_N: begin
                 if (rx_pulse && is_delimiter) begin
                     if (current_value >= 1 && current_value <= 5) begin
-                        if (w_task_mode == 1) next_state = S_DONE;
-                        else if (w_is_gen_mode) next_state = S_RX_COUNT;
+                        if (w_is_gen_mode) next_state = S_RX_COUNT;
                         else next_state = S_WAIT_ADDR;
                     end
                     else next_state = S_RX_M; // 维度配置错误，重置
@@ -130,11 +128,8 @@ module Input_Subsystem (
 
             S_USER_INPUT: begin
                 if (rx_pulse && is_delimiter) begin
-                    if (current_value > 9) begin
-                        // 数值错误，留在原地等待重输 (Stage 3 会置 error flag)
-                        next_state = S_USER_INPUT;
-                    end
-                    else if (w_input_addr + 1 >= expected_count) next_state = S_DONE;
+
+                    if (w_input_addr + 1 >= expected_count) next_state = S_DONE;
                     else if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_DONE;
                 end
             end
