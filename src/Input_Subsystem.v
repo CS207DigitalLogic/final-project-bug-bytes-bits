@@ -8,7 +8,7 @@ module Input_Subsystem (
     input wire [8:0] w_base_addr,      
     input wire w_addr_ready,          
     input wire w_is_gen_mode,         
-    input wire [1:0] w_task_mode, 
+    input wire [1:0] w_task_mode, // task_mode为0：输入/生成模式
 
     output reg w_input_we, 
     output wire [8:0] w_real_addr, 
@@ -123,19 +123,19 @@ module Input_Subsystem (
             end
 
             S_PRE_CLEAR: begin
-                if (w_input_addr >= expected_count-1) next_state = S_USER_INPUT;
+                if (w_input_addr >= expected_count) next_state = S_USER_INPUT;
             end
 
             S_USER_INPUT: begin
                 if (rx_pulse && is_delimiter) begin
 
-                    if (w_input_addr + 1 >= expected_count) next_state = S_DONE;
+                    if (w_input_addr >= expected_count) next_state = S_DONE;
                     else if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_DONE;
                 end
             end
 
             S_GEN_FILL: begin
-                if (w_input_addr >= expected_count-1) begin
+                if (w_input_addr >= expected_count) begin
                     if (gen_curr_cnt + 1 < gen_total_mats) next_state = S_WAIT_ADDR;
                     else next_state = S_GEN_WAIT;
                 end
@@ -256,7 +256,7 @@ module Input_Subsystem (
                 end
 
                 S_PRE_CLEAR: begin 
-                    if (w_input_addr < expected_count-1) begin
+                    if (w_input_addr < expected_count) begin
                         w_input_we <= 1;
                         w_input_data <= 0;
                     end else begin

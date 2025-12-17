@@ -232,7 +232,7 @@ module FSM_Controller (
                 S_IDLE: begin
                     if (btn_confirm_pose) begin
                         case (sw[1:0])
-                            2'b00: next_state = S_INPUT_MODE;
+                            2'b00: next_state = S_INPUT_MODE;// 1.开关调成00 按确认键跳转
                             2'b01: next_state = S_GEN_MODE;
                             2'b10: next_state = S_CALC_SELECT_OP;
                             2'b11: next_state = S_MENU_DISP_GET_DIM;
@@ -241,7 +241,7 @@ module FSM_Controller (
                 end
 
                 S_INPUT_MODE, S_GEN_MODE: begin
-                    if (w_rx_done) next_state = S_WAIT_DECISION;
+                    if (w_rx_done) next_state = S_WAIT_DECISION;// 等待输入完成跳转
                     else if (w_timeout) next_state = S_ERROR;
                 end
 
@@ -372,7 +372,7 @@ module FSM_Controller (
                     else if (w_is_gen_mode) led <= 8'b0000_0100;
                     else led <= 8'b0000_0010;
                     
-                    if (w_dims_valid) begin
+                    if (w_dims_valid) begin//这里其实有点危险，只给了一个周期同步给基地址查表
                         w_addr_ready <= 1; w_base_addr_to_input <= calc_final_addr;
                     end else w_addr_ready <= 0;
 
