@@ -61,23 +61,6 @@ module Seg7_Driver (
     
     reg [7:0] decode_out[0:3];
 
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            cnt<=0;
-        end else begin
-            cnt<=cnt+1;
-        end
-    end
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            scan_cnt<=0;
-        end else begin
-            if (cnt==0) scan_cnt<=scan_cnt+1;
-            else scan_cnt<=scan_cnt;
-        end
-    end
-
     always @(*) begin
         if (!i_en) begin
             decode_out[0]=SEG_OFF;
@@ -108,22 +91,39 @@ module Seg7_Driver (
         end
     end
 
+    reg blank;
+
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             seg_sel<=0;
             seg_data<=0;
+            cnt<=0;
+            scan_cnt<=0;
+            blank<=1'b0;
         end else if (!i_en) begin
             seg_sel<=0;
             seg_data<=0;
+            cnt<=0;
+            scan_cnt<=0;
+            blank<=1'b0;
         end else begin
-            seg_data<=decode_out[scan_cnt];
-            case (scan_cnt)
-                2'b00: seg_sel<=4'b0001;
-                2'b01: seg_sel<=4'b0010;
-                2'b10: seg_sel<=4'b0100;
-                2'b11: seg_sel<=4'b1000;
-                default: seg_sel<=4'b0000;
-            endcase
+            cnt<=cnt+1;
+            if (cnt==0) begin
+                blank<=1'b1;
+                seg_sel<=0;
+                seg_data<=0;
+                scan_cnt<=scan_cnt+1;
+            end else if (blank && cnt>=13'd100) begin
+                blank<=1'b0;
+                seg_data<=decode_out[scan_cnt];
+                case (scan_cnt)
+                    2'b00: seg_sel<=4'b0001;
+                    2'b01: seg_sel<=4'b0010;
+                    2'b10: seg_sel<=4'b0100;
+                    2'b11: seg_sel<=4'b1000;
+                    default: seg_sel<=4'b0000;
+                endcase
+            end
         end
     end
 endmodule
