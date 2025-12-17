@@ -86,7 +86,7 @@ module Input_Subsystem (
     end
 
     // =========================================================================
-    // Stage 2: 次态逻辑 (保持宽容，错误时不跳转)
+    // Stage 2: 次态逻辑 (修复版)
     // =========================================================================
     always @(*) begin
         next_state = state; // 默认留在当前状态
@@ -94,23 +94,39 @@ module Input_Subsystem (
         case (state)
             S_RX_M: begin
                 if (rx_pulse && is_delimiter) begin
-                    if (current_value >= 1 && current_value <= 5) next_state = S_RX_N;
+                    // 修复：如果是空行（值为0），不进行跳转，也不重置，直接忽略
+                    if (current_value == 0) begin
+                        next_state = S_RX_M; 
+                    end
+                    else if (current_value >= 1 && current_value <= 5) begin
+                         next_state = S_RX_N;
+                    end
+                    // 只有当值确实超出范围时，才保持当前状态(配合报错)或重置
+                    // 这里保持 S_RX_M 等待新输入即可
                 end
             end
 
             S_RX_N: begin
                 if (rx_pulse && is_delimiter) begin
-                    if (current_value >= 1 && current_value <= 5) begin
+                    // 修复：忽略空行（例如 \r 之后的 \n）
+                    if (current_value == 0) begin
+                        next_state = S_RX_N;
+                    end
+                    else if (current_value >= 1 && current_value <= 5) begin
                         if (w_is_gen_mode) next_state = S_RX_COUNT;
                         else next_state = S_WAIT_ADDR;
                     end
-                    else next_state = S_RX_M; // 维度配置错误，重置
+                    else next_state = S_RX_M; // 只有格式真正错误时才重置
                 end
             end
 
             S_RX_COUNT: begin
                 if (rx_pulse && is_delimiter) begin
-                    if (current_value >= 1 && current_value <= 2) next_state = S_WAIT_ADDR;
+                    // 修复：忽略空行
+                    if (current_value == 0) begin
+                        next_state = S_RX_COUNT;
+                    end
+                    else if (current_value >= 1 && current_value <= 2) next_state = S_WAIT_ADDR;
                     else next_state = S_RX_M;
                 end
             end
@@ -128,9 +144,12 @@ module Input_Subsystem (
 
             S_USER_INPUT: begin
                 if (rx_pulse && is_delimiter) begin
-
+                    // 修复：移除 "else if (rx_data == ASC_CR...)" 的判断
+                    // 只有当输入个数满足要求时，才跳转到 DONE
                     if (w_input_addr >= expected_count) next_state = S_DONE;
-                    else if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_DONE;
+                    
+                    // 注意：如果 current_value 为 0 (空回车)，我们保持在 S_USER_INPUT
+                    // 不做任何跳转，等待下一个数字
                 end
             end
 

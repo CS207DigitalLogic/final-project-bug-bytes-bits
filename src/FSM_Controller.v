@@ -378,7 +378,7 @@ module FSM_Controller (
                     else if (w_is_gen_mode) led <= 8'b0000_0100;
                     else led <= 8'b0000_0010;
                     
-                    if (w_dims_valid) begin//这里其实有点危险，只给了一个周期同步给基地址查表
+                    if (w_dims_valid) begin
                         w_addr_ready <= 1; w_base_addr_to_input <= calc_final_addr;
                     end else w_addr_ready <= 0;
 

@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module Display_Subsystem (
     input wire clk,
     input wire rst_n,
@@ -245,12 +247,23 @@ module Display_Subsystem (
             case (state)
                 S_INIT: begin
                     mat_idx <= 0; row_cnt <= 0; col_cnt <= 0; tx_step <= 0;
-                    if (w_disp_mode == 1) begin r_cached_m <= w_disp_m; r_cached_n <= w_disp_n; end
+                    
+                    // 【修复核心】：Mode 0 (单矩阵) 和 Mode 1 (列表) 都会写缓存，必须同步更新缓存维度！
+                    if (w_disp_mode == 1 || w_disp_mode == 0) begin 
+                        r_cached_m <= w_disp_m; 
+                        r_cached_n <= w_disp_n; 
+                    end
+                    
+                    if (w_disp_mode == 1) begin 
+                        // r_cached_m/n updated above
+                    end
                     else if (w_disp_mode == 2) o_lut_idx_req <= 0;
                     else if (w_disp_mode == 3) begin 
                         if (w_disp_selected_id == 2) mat_idx <= 1; else mat_idx <= 0;
                     end
-                    else if (w_disp_mode == 0) mat_idx <= 0;
+                    else if (w_disp_mode == 0) begin
+                        mat_idx <= 0;
+                    end
                 end
 
                 // --- Summary Data Prep ---
