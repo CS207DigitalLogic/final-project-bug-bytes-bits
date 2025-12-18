@@ -11,7 +11,7 @@ module Input_Subsystem (
     input wire [1:0] w_task_mode, // task_mode为0：输入/生成模式 1：读维度模式（计算过程用） 2：读编号模式（计算过程用）
 
     output reg w_input_we, 
-    output wire [8:0] w_real_addr, 
+    (* mark_debug = "true" *)output wire [8:0] w_real_addr, 
     output reg [31:0] w_input_data, 
     output reg w_rx_done,         
     output reg w_error_flag, // 1=输入有误(开启外部倒计时)，0=正常

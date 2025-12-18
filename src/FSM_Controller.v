@@ -8,7 +8,7 @@ module FSM_Controller (
     output reg [7:0] led,
 
     // --- Input Subsystem ---
-    input wire w_dims_valid,  
+    (* mark_debug = "true" *)input wire w_dims_valid,  
     input wire [31:0] i_dim_m,
     input wire [31:0] i_dim_n,
     input wire w_rx_done,     
@@ -16,13 +16,13 @@ module FSM_Controller (
     input wire w_timeout,     
     
     input wire [31:0] i_input_id_val, 
-    input wire w_id_valid,            
+    (* mark_debug = "true" *)input wire w_id_valid,            
     
     output reg w_en_input,    
     output reg w_is_gen_mode, 
     output reg [1:0] w_task_mode, 
-    output reg w_addr_ready,  
-    output reg [8:0] w_base_addr_to_input, 
+    (* mark_debug = "true" *)output reg w_addr_ready,  
+    (* mark_debug = "true" *)output reg [8:0] w_base_addr_to_input, 
 
     // --- Display Subsystem ---
     input wire w_disp_done,           
@@ -88,8 +88,8 @@ module FSM_Controller (
     reg [8:0]  lut_start_addr [0:MAX_TYPES-1];
     reg        lut_idx [0:MAX_TYPES-1];
     reg [1:0]  lut_valid_cnt [0:MAX_TYPES-1];
-    reg [4:0]  lut_count;
-    reg [8:0]  free_ptr;
+    (* mark_debug = "true" *)reg [4:0]  lut_count;
+    (* mark_debug = "true" *)reg [8:0]  free_ptr;
 
     // 上下文
     reg [2:0] r_op_code;
@@ -379,7 +379,9 @@ module FSM_Controller (
                     else led <= 8'b0000_0010;
                     
                     if (w_dims_valid) begin
-                        w_addr_ready <= 1; w_base_addr_to_input <= calc_final_addr;
+                        w_addr_ready <= 1; 
+                        if (w_addr_ready == 0)
+                        w_base_addr_to_input <= calc_final_addr;
                     end else w_addr_ready <= 0;
 
                     if (w_dims_valid && w_addr_ready == 0) begin
