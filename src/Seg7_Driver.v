@@ -74,8 +74,8 @@ module Seg7_Driver (
             case(i_op_code)
                 3'd0: decode_out[0]=SEG_T;
                 3'd1: decode_out[0]=SEG_A;
-                3'd2: decode_out[0]=SEG_C;
-                3'd3: decode_out[0]=SEG_B;
+                3'd2: decode_out[0]=SEG_B;
+                3'd3: decode_out[0]=SEG_C;
                 default: decode_out[0]=SEG_E;
             endcase
         end else begin
