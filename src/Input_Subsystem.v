@@ -11,7 +11,7 @@ module Input_Subsystem (
     input wire [1:0] w_task_mode, // task_mode为0：输入/生成模式 1：读维度模式（计算过程用） 2：读编号模式（计算过程用）
 
     output reg w_input_we, 
-    (* mark_debug = "true" *)output wire [8:0] w_real_addr, 
+    output wire [8:0] w_real_addr, 
     output reg [31:0] w_input_data, 
     output reg w_rx_done,         
     output reg w_error_flag, // 1=输入有误(开启外部倒计时)，0=正常
@@ -39,6 +39,8 @@ module Input_Subsystem (
 
     localparam S_ERROR_FLUSH = 9;
 
+    localparam TIMEOUT_MAX = 32'd25_000_000;
+
     reg [3:0] state, next_state;
     reg [31:0] current_value;
     reg [31:0] reg_m, reg_n, expected_count;
@@ -48,6 +50,8 @@ module Input_Subsystem (
     reg [31:0] gen_curr_cnt;
     reg [31:0] lfsr_reg;
     wire [31:0] random_val;
+
+    reg [31:0] timeout_cnt;
 
     wire [7:0] rx_data;
     wire rx_pulse;
@@ -64,6 +68,25 @@ module Input_Subsystem (
     always @(posedge clk) begin 
         if (!rst_n) lfsr_reg <= 32'hACE1;
         else lfsr_reg <= {lfsr_reg[30:0], lfsr_reg[31] ^ lfsr_reg[21] ^ lfsr_reg[1]};
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            timeout_cnt <= 0;
+        end else begin
+            if (state == S_USER_INPUT || state == S_ERROR_FLUSH) begin
+                if (rx_pulse) begin
+                    // 如果检测到有数据输入（无论是数字还是分隔符），重置计时
+                    timeout_cnt <= 0;
+                end else if (timeout_cnt < TIMEOUT_MAX) begin
+                    // 没有数据时，持续计时
+                    timeout_cnt <= timeout_cnt + 1;
+                end
+            end else begin
+                // 其他状态下清零计数器
+                timeout_cnt <= 0;
+            end
+        end
     end
 
     uart_rx #(
@@ -140,7 +163,7 @@ module Input_Subsystem (
             end
 
             S_PRE_CLEAR: begin
-                if (w_input_addr >= expected_count) next_state = S_USER_INPUT;
+                if (w_input_addr >= expected_count-1) next_state = S_USER_INPUT;
             end
 
             S_USER_INPUT: begin
@@ -148,6 +171,9 @@ module Input_Subsystem (
                     // 提前判断，输入完最后一个数立刻结束，无需多按一次
                     if (w_input_addr >= expected_count - 1) next_state = S_DONE; //expected_count 是m*n，也就是需要读取多少次，当读取完成跳到done
                     else if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_DONE;
+                end                    
+                else if (timeout_cnt >= TIMEOUT_MAX) begin
+                    next_state = S_DONE;
                 end
             end
 
@@ -161,6 +187,9 @@ module Input_Subsystem (
             S_ERROR_FLUSH: begin
                 if (rx_pulse && (rx_data == ASC_CR || rx_data == ASC_LF)) begin
                     next_state = S_RX_M;
+                end
+                else if (timeout_cnt >= TIMEOUT_MAX) begin
+                    next_state = S_RX_M; 
                 end
             end
 
@@ -280,7 +309,7 @@ module Input_Subsystem (
                 end
 
                 S_PRE_CLEAR: begin 
-                    if (w_input_addr < expected_count) begin
+                    if (w_input_addr < expected_count-1) begin
                         w_input_we <= 1;
                         w_input_data <= 0;
                     end else begin

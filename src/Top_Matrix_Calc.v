@@ -59,14 +59,14 @@ module Top_Module (
     assign w_calc_addr_merged = (w_calc_we) ? w_calc_waddr : w_calc_req_addr;
 
     // --- Storage MUX & Memory 信号 ---
-    (* mark_debug = "true" *)wire [8:0] w_input_addr;
+    wire [8:0] w_input_addr;
     wire [31:0] w_input_data;
     wire w_input_we;
     wire [8:0] w_disp_req_addr;
-    (* mark_debug = "true" *)wire [8:0] w_storage_addr;
-    (* mark_debug = "true" *)wire [31:0] w_storage_wdata;
-    (* mark_debug = "true" *)wire w_storage_we;
-    (* mark_debug = "true" *)wire [31:0] w_storage_rdata;
+    wire [8:0] w_storage_addr;
+    wire [31:0] w_storage_wdata;
+    wire w_storage_we;
+    wire [31:0] w_storage_rdata;
 
     // --- Timer & Seg7 信号 ---
     wire w_timeout;
