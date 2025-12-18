@@ -109,6 +109,12 @@ module FSM_Controller (
     reg [31:0] r_res_m, r_res_n;
     reg [4:0] r_retry_state;
 
+    reg       r_alloc_active;     // 1=已分配但未完成输入，0=空闲或已完成
+    reg       r_alloc_is_new;     // 1=是新创建的矩阵，0=是覆盖旧矩阵
+    reg [4:0] r_alloc_idx;        // 记录操作的是哪个LUT索引
+    reg [8:0] r_backup_free_ptr;  // 备份分配前的 free_ptr
+    reg [1:0] r_backup_valid_cnt; // 备份覆盖前的 valid_cnt
+
     // 按键消抖寄存器
     reg btn0_d0, btn0_d1;
     reg btn1_d0, btn1_d1;
@@ -373,6 +379,11 @@ module FSM_Controller (
             w_logic_error <= 0;
             r_scalar_val <= 0;
             chk_valid_done <= 0;
+            r_alloc_active <= 0;
+            r_alloc_is_new <= 0;
+            r_alloc_idx <= 0;
+            r_backup_free_ptr <= 0;
+            r_backup_valid_cnt <= 0;
         end 
         else begin
             w_addr_ready <= 0; w_start_calc <= 0;
@@ -397,9 +408,9 @@ module FSM_Controller (
                     end
                 end
 
-                // ... (S_INPUT_MODE ~ S_CALC_SHOW_MAT 保持不变) ...
                 S_INPUT_MODE, S_GEN_MODE: begin
-                    w_en_input <= 1; w_task_mode <= 0;
+                    w_en_input <= 1;
+                    w_task_mode <= 0;
                     w_is_gen_mode <= (current_state == S_GEN_MODE);
                     
                     if (w_error_flag) led <= 8'b1111_1111;
@@ -407,20 +418,30 @@ module FSM_Controller (
                     else led <= 8'b0000_0010;
                     
                     if (w_dims_valid) begin
-                        w_addr_ready <= 1; 
+                        w_addr_ready <= 1;
                         if (w_addr_ready == 0)
-                        w_base_addr_to_input <= calc_final_addr;
+                            w_base_addr_to_input <= calc_final_addr;
                     end else w_addr_ready <= 0;
 
                     if (w_dims_valid && w_addr_ready == 0) begin
-                         if (calc_match_found) begin
+                        r_alloc_active <= 1; 
+
+                        if (calc_match_found) begin
+                            r_alloc_is_new <= 0;
+                            r_alloc_idx <= calc_match_index;
+                            r_backup_valid_cnt <= lut_valid_cnt[calc_match_index]; // 备份旧的 valid_cnt
+
                             lut_idx[calc_match_index] <= ~lut_idx[calc_match_index];
                             if (lut_valid_cnt[calc_match_index] < 2)
                                 lut_valid_cnt[calc_match_index] <= lut_valid_cnt[calc_match_index] + 1;
                         end 
                         else begin
                             if (lut_count < MAX_TYPES) begin
-                                lut_m[lut_count] <= i_dim_m; lut_n[lut_count] <= i_dim_n;
+                                r_alloc_is_new <= 1;
+                                r_backup_free_ptr <= free_ptr; // 备份旧的 free_ptr
+
+                                lut_m[lut_count] <= i_dim_m;
+                                lut_n[lut_count] <= i_dim_n;
                                 lut_start_addr[lut_count] <= free_ptr;
                                 lut_idx[lut_count] <= 1; lut_valid_cnt[lut_count] <= 1;
                                 free_ptr <= free_ptr + (single_mat_size << 1);
@@ -428,7 +449,22 @@ module FSM_Controller (
                             end
                         end
                     end
-                    if (w_rx_done) w_en_input <= 0;
+                    if (w_rx_done) begin 
+                        w_en_input <= 0;
+                        r_alloc_active <= 0; 
+                    end
+                    else if (w_error_flag) begin
+                        if (r_alloc_active) begin
+                            r_alloc_active <= 0;
+                            if (r_alloc_is_new) begin
+                                lut_count <= lut_count - 1;
+                                free_ptr <= r_backup_free_ptr;
+                            end else begin
+                                lut_idx[r_alloc_idx] <= ~lut_idx[r_alloc_idx]; 
+                                lut_valid_cnt[r_alloc_idx] <= r_backup_valid_cnt; 
+                            end
+                        end
+                    end
                 end
                 
                 S_MENU_DISP_GET_DIM: begin
