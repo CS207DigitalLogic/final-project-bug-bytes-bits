@@ -37,6 +37,8 @@ module Input_Subsystem (
     localparam S_GEN_WAIT   = 8;
     localparam S_DONE       = 7; 
 
+    localparam S_ERROR_FLUSH = 9;
+
     reg [3:0] state, next_state;
     reg [31:0] current_value;
     reg [31:0] reg_m, reg_n, expected_count;
@@ -95,6 +97,12 @@ module Input_Subsystem (
                 if (rx_pulse && is_delimiter) begin//这些都提前预测输入值是否正确，从而确定状态跳转逻辑
                     if (current_value == 0) next_state = S_RX_M;
                     else if (current_value >= 1 && current_value <= 5) next_state = S_RX_N; //输入值合法，则跳到读取第二个维度
+                    else begin
+                        // 如果是回车结束的，直接重置等待下一次输入
+                        if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_RX_M;
+                        // 如果是空格结束的（后面还有数据），进入 Flush 状态吞掉剩余输入
+                        else next_state = S_ERROR_FLUSH;
+                    end
                 end
             end
 
@@ -105,7 +113,11 @@ module Input_Subsystem (
                         if (w_is_gen_mode) next_state = S_RX_COUNT; //状态合法并且是生成模式，则跳到读count（要生成几个矩阵）
                         else next_state = S_WAIT_ADDR; //状态合法并且是输入模式， 则跳到等FSM分配地址
                     end
-                    else next_state = S_RX_M; //输入不合法就跳到读第一个维度重新等待合法输入
+                    else begin
+                        //N 输入不合法
+                        if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_RX_M;
+                        else next_state = S_ERROR_FLUSH;
+                    end
                 end
             end
 
@@ -113,7 +125,10 @@ module Input_Subsystem (
                 if (rx_pulse && is_delimiter) begin
                     if (current_value == 0) next_state = S_RX_COUNT;
                     else if (current_value >= 1 && current_value <= 2) next_state = S_WAIT_ADDR; //只允许生成1个或者2个矩阵，成功就等待FSM分配地址
-                    else next_state = S_RX_M;
+                    else begin
+                        if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_RX_M;
+                        else next_state = S_ERROR_FLUSH;
+                    end
                 end
             end
 
@@ -140,6 +155,12 @@ module Input_Subsystem (
                 if (w_input_addr >= expected_count) begin
                     if (gen_curr_cnt + 1 < gen_total_mats) next_state = S_WAIT_ADDR;
                     else next_state = S_GEN_WAIT;
+                end
+            end
+
+            S_ERROR_FLUSH: begin
+                if (rx_pulse && (rx_data == ASC_CR || rx_data == ASC_LF)) begin
+                    next_state = S_RX_M;
                 end
             end
 
@@ -307,6 +328,11 @@ module Input_Subsystem (
                     end else begin
                         gen_curr_cnt <= gen_curr_cnt + 1;
                     end
+                end
+
+                S_ERROR_FLUSH: begin
+                    w_error_flag <= 1;
+                    current_value <= 0;
                 end
 
                 S_GEN_WAIT: w_input_we <= 0;
