@@ -69,14 +69,14 @@ module FSM_Controller (
     localparam S_CALC_SHOW_LIST    = 5'd7;
     localparam S_CALC_GET_ID       = 5'd8;
     localparam S_CALC_SHOW_MAT     = 5'd9;
-    localparam S_CALC_EXECUTE      = 5'd10;
-    localparam S_CALC_RES_SHOW     = 5'd11;
-    localparam S_MENU_DISP_GET_DIM = 5'd12;
-    localparam S_MENU_DISP_FILTER  = 5'd13;
-    localparam S_MENU_DISP_SHOW    = 5'd14;
-    localparam S_ERROR             = 5'd15;
-    localparam S_WAIT_DECISION     = 5'd16;
-    localparam S_CALC_GET_SCALAR   = 5'd17;
+    localparam S_CALC_GET_SCALAR   = 5'd10;
+    localparam S_CALC_EXECUTE      = 5'd11;
+    localparam S_CALC_RES_SHOW     = 5'd12;
+    localparam S_MENU_DISP_GET_DIM = 5'd13;
+    localparam S_MENU_DISP_FILTER  = 5'd14;
+    localparam S_MENU_DISP_SHOW    = 5'd15;
+    localparam S_ERROR             = 5'd16;
+    localparam S_WAIT_DECISION     = 5'd17;
 
     localparam MAX_TYPES = 25;
 
