@@ -89,8 +89,8 @@ module Top_Module (
     // =========================================================================
     
     localparam S_CALC_START = 5'd3;  
-    localparam S_CALC_END   = 5'd11; 
-    localparam S_ERROR      = 5'd15; 
+    localparam S_CALC_END   = 5'd12; 
+    localparam S_ERROR      = 5'd16; 
 
     reg [4:0] state_d;
     reg w_input_error_d;
@@ -112,7 +112,7 @@ module Top_Module (
     // 1. 移除了 S_ERROR 作为开启条件
     // 2. 增加了 && (w_state != S_ERROR) 作为强制关闭条件
     //    这意味着一旦进入 ERROR 状态，哪怕 w_input_error 还是 1，数码管也会强制熄灭
-    assign w_seg_en = ((w_state >= S_CALC_START && w_state <= S_CALC_END) || 
+    assign w_seg_en = ((w_state >= S_CALC_START && w_state <= S_CALC_END) ||
                        (w_logic_error)) && (w_state != S_ERROR);
     
     // C. 显示模式
