@@ -70,6 +70,7 @@ module FSM_Controller (
     localparam S_CALC_GET_ID       = 5'd8;
     localparam S_CALC_SHOW_MAT     = 5'd9;
     localparam S_CALC_GET_SCALAR   = 5'd10;
+    localparam S_CALC_CHECK_VALID  = 5'd18;
     localparam S_CALC_EXECUTE      = 5'd11;
     localparam S_CALC_RES_SHOW     = 5'd12;
     localparam S_MENU_DISP_GET_DIM = 5'd13;
@@ -125,6 +126,8 @@ module FSM_Controller (
     assign btn_confirm_pose = btn0_d0 & ~btn0_d1;
     assign btn_retry_pose   = btn1_d0 & ~btn1_d1;
     assign btn_menu_pose    = btn2_d0 & ~btn2_d1; 
+
+    reg chk_valid_done;
 
     // =========================================================================
     // 0. 辅助组合逻辑 
@@ -306,7 +309,7 @@ module FSM_Controller (
                             if (r_op_code == 3'b010) next_state = S_CALC_GET_SCALAR;
                             else next_state = S_CALC_GET_DIM;
                         end
-                        else next_state = S_CALC_EXECUTE;
+                        else next_state = S_CALC_CHECK_VALID;
                     end
                 end
 
@@ -314,8 +317,13 @@ module FSM_Controller (
                 S_CALC_GET_SCALAR: begin
                     // 只要按了确认键，就直接拿数据去计算
                     if (btn_confirm_pose) begin
-                        next_state = S_CALC_EXECUTE;
+                        next_state = S_CALC_CHECK_VALID;
                     end
+                end
+
+                S_CALC_CHECK_VALID: begin
+                    if (w_timeout) next_state=S_ERROR;
+                    else if (chk_valid_done) next_state=S_CALC_EXECUTE;
                 end
 
                 S_CALC_EXECUTE: begin
@@ -357,6 +365,7 @@ module FSM_Controller (
             r_retry_state <= S_IDLE;
             w_logic_error <= 0;
             r_scalar_val <= 0;
+            chk_valid_done <= 0;
         end 
         else begin
             w_addr_ready <= 0; w_start_calc <= 0;
@@ -364,6 +373,8 @@ module FSM_Controller (
             btn0_d0 <= btn0_f; btn0_d1 <= btn0_d0;
             btn1_d0 <= btn1_f; btn1_d1 <= btn1_d0;
             btn2_d0 <= btn2_f; btn2_d1 <= btn2_d0; 
+            
+            chk_valid_done <= 0;
 
             case (current_state)
                 S_IDLE: begin
@@ -505,6 +516,32 @@ module FSM_Controller (
                     if (btn_confirm_pose) begin
                         r_scalar_val <= {28'd0, sw[7:4]}; 
                     end
+                end
+
+                S_CALC_CHECK_VALID: begin
+                    w_logic_error<=0;
+                    case (r_op_code)
+                        3'b000: chk_valid_done<=1;
+                        3'b001: begin
+                            if (r_op1_m==r_op1_n && r_op2_m==r_op2_n)
+                                chk_valid_done<=1;
+                            else
+                                w_logic_error<=1;
+                        end
+                        3'b010: chk_valid_done<=1;
+                        3'b011: begin
+                            if (r_op1_n==r_op2_m)
+                                chk_valid_done<=1;
+                            else
+                                w_logic_error<=1;
+                        end
+                        default: begin
+                            if (r_op1_n==r_op2_m)
+                                chk_valid_done<=1;
+                            else
+                                w_logic_error<=1;
+                        end
+                    endcase
                 end
                 
                 S_CALC_EXECUTE: begin
