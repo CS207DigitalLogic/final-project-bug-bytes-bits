@@ -7,8 +7,8 @@ module Input_Subsystem (
     input wire w_en_input, 
     input wire [8:0] w_base_addr,      
     input wire w_addr_ready,          
-    input wire w_is_gen_mode,         
-    input wire [1:0] w_task_mode, // task_mode为0：输入/生成模式
+    input wire w_is_gen_mode, // 是否为生成模式        
+    input wire [1:0] w_task_mode, // task_mode为0：输入/生成模式 1：读维度模式（计算过程用） 2：读编号模式（计算过程用）
 
     output reg w_input_we, 
     output wire [8:0] w_real_addr, 
@@ -91,50 +91,50 @@ module Input_Subsystem (
         next_state = state; 
 
         case (state)
-            S_RX_M: begin
-                if (rx_pulse && is_delimiter) begin
+            S_RX_M: begin //读取第一个维度
+                if (rx_pulse && is_delimiter) begin//这些都提前预测输入值是否正确，从而确定状态跳转逻辑
                     if (current_value == 0) next_state = S_RX_M;
-                    else if (current_value >= 1 && current_value <= 5) next_state = S_RX_N;
+                    else if (current_value >= 1 && current_value <= 5) next_state = S_RX_N; //输入值合法，则跳到读取第二个维度
                 end
             end
 
-            S_RX_N: begin
+            S_RX_N: begin //读取第二个维度
                 if (rx_pulse && is_delimiter) begin
                     if (current_value == 0) next_state = S_RX_N;
                     else if (current_value >= 1 && current_value <= 5) begin
-                        if (w_is_gen_mode) next_state = S_RX_COUNT;
-                        else next_state = S_WAIT_ADDR;
+                        if (w_is_gen_mode) next_state = S_RX_COUNT; //状态合法并且是生成模式，则跳到读count（要生成几个矩阵）
+                        else next_state = S_WAIT_ADDR; //状态合法并且是输入模式， 则跳到等FSM分配地址
                     end
-                    else next_state = S_RX_M; 
+                    else next_state = S_RX_M; //输入不合法就跳到读第一个维度重新等待合法输入
                 end
             end
 
             S_RX_COUNT: begin
                 if (rx_pulse && is_delimiter) begin
                     if (current_value == 0) next_state = S_RX_COUNT;
-                    else if (current_value >= 1 && current_value <= 2) next_state = S_WAIT_ADDR;
+                    else if (current_value >= 1 && current_value <= 2) next_state = S_WAIT_ADDR; //只允许生成1个或者2个矩阵，成功就等待FSM分配地址
                     else next_state = S_RX_M;
                 end
             end
 
             S_WAIT_ADDR: begin
                 if (w_addr_ready) begin
-                    if (w_is_gen_mode) next_state = S_GEN_FILL;
+                    if (w_is_gen_mode) next_state = S_GEN_FILL; //收到FSM的握手信号（地址分配好了）且是生成模式，则进行随机数填充
                     // 【调试修改】这里原先是跳到 S_PRE_CLEAR，现在直接跳到 S_USER_INPUT
                     // 跳过清零步骤，直接开始接收用户输入
-                    else next_state = S_USER_INPUT; 
+                    else next_state = S_USER_INPUT; //否则到用户输入读取
                 end
             end
 
             // S_PRE_CLEAR 状态现在无法到达，逻辑被短路了
-            S_PRE_CLEAR: begin
+            S_PRE_CLEAR: begin//预留的预先清零地址模式
                 if (w_input_addr >= expected_count) next_state = S_USER_INPUT;
             end
 
             S_USER_INPUT: begin
                 if (rx_pulse && is_delimiter) begin
                     // 提前判断，输入完最后一个数立刻结束，无需多按一次
-                    if (w_input_addr >= expected_count - 1) next_state = S_DONE;
+                    if (w_input_addr >= expected_count - 1) next_state = S_DONE; //expected_count 是m*n，也就是需要读取多少次，当读取完成跳到done
                 end
             end
 
@@ -169,7 +169,7 @@ module Input_Subsystem (
             w_id_valid <= 0;
             w_rx_done <= 0;
 
-            if (w_input_we) w_input_addr <= w_input_addr + 1;
+            if (w_input_we) w_input_addr <= w_input_addr + 1;//全局的地址更新逻辑，如果写使能信号被拉高就增加地址
 
             case (state)
                 S_RX_M: begin
@@ -179,7 +179,7 @@ module Input_Subsystem (
                             current_value <= current_value * 10 + (rx_data - ASC_0);
                         end
                         else if (is_delimiter) begin
-                            if (w_task_mode == 2) begin 
+                            if (w_task_mode == 2) begin  //读矩阵编号模式
                                 w_input_id_val <= current_value;
                                 w_id_valid <= 1;
                             end else begin
@@ -211,7 +211,7 @@ module Input_Subsystem (
                             end else begin
                                 reg_n <= current_value;
                                 expected_count <= reg_m * current_value;
-                                if (w_task_mode == 1) w_dims_valid <= 1;
+                                if (w_task_mode == 1) w_dims_valid <= 1; //读矩阵维度模式
                                 else begin
                                     gen_total_mats <= 1;
                                     gen_curr_cnt <= 0;
