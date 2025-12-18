@@ -140,13 +140,23 @@ module FSM_Controller (
 
     always @(*) begin
         calc_pred_m = 0; calc_pred_n = 0;
-        if (r_op_code == 3'b000) begin      // Transpose
-            calc_pred_m = r_op1_n; calc_pred_n = r_op1_m;
-        end else if (r_op_code == 3'b010) begin // Scalar Mul
-            calc_pred_m = r_op1_m; calc_pred_n = r_op2_n; 
-        end else begin                      // Add / MatMul
-            calc_pred_m = r_op1_m; calc_pred_n = r_op1_n;
-        end
+        case (r_op_code)
+            3'b000: begin      // Transpose
+                calc_pred_m = r_op1_n; calc_pred_n = r_op1_m;
+            end 
+            3'b001: begin                    // Add 
+                calc_pred_m = r_op1_m; calc_pred_n = r_op1_n;
+            end
+            3'b010: begin // Scalar Mul
+                calc_pred_m = r_op1_m; calc_pred_n = r_op1_n; 
+            end
+            3'b011: begin //MatMul
+                calc_pred_m = r_op1_m; calc_pred_n = r_op2_n; 
+            end
+            default: begin
+                calc_pred_m = r_op1_m; calc_pred_n = r_op2_n; 
+            end
+        endcase
     end
 
     always @(*) begin
@@ -499,13 +509,17 @@ module FSM_Controller (
                 
                 S_CALC_EXECUTE: begin
                     w_start_calc <= 1; w_op_code <= r_op_code; w_res_addr <= calc_final_addr;
-                    if (r_op_code == 3'b000) begin r_res_m <= r_op1_n; r_res_n <= r_op1_m; end
-                    else if (r_op_code == 3'b010) begin 
-                        r_res_m <= r_op1_m; 
-                        r_res_n <= r_op1_n; 
-                        w_op2_m <= r_scalar_val; 
-                    end
-                    else begin r_res_m <= r_op1_m; r_res_n <= r_op1_n; end
+                    case(r_op_code)
+                        3'b000: begin r_res_m <= r_op1_n; r_res_n <= r_op1_m; end
+                        3'b001: begin r_res_m <= r_op1_m; r_res_n <= r_op1_n; end
+                        3'b010: begin 
+                            r_res_m <= r_op1_m; 
+                            r_res_n <= r_op1_n; 
+                            w_op2_m <= r_scalar_val; 
+                        end
+                        3'b011: begin  r_res_m=r_op1_m; r_res_n=r_op2_n; end
+                        default: begin  r_res_m=r_op1_m; r_res_n=r_op2_n; end
+                    endcase
                     
                     if (w_calc_done) begin
                         w_start_calc <= 0;
