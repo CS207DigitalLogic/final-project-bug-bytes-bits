@@ -85,7 +85,7 @@ module Input_Subsystem (
     end
 
     // =========================================================================
-    // Stage 2: 次态逻辑 (已禁用 PRE_CLEAR)
+    // Stage 2: 次态逻辑 
     // =========================================================================
     always @(*) begin
         next_state = state; 
@@ -119,15 +119,12 @@ module Input_Subsystem (
 
             S_WAIT_ADDR: begin
                 if (w_addr_ready) begin
-                    if (w_is_gen_mode) next_state = S_GEN_FILL; //收到FSM的握手信号（地址分配好了）且是生成模式，则进行随机数填充
-                    // 【调试修改】这里原先是跳到 S_PRE_CLEAR，现在直接跳到 S_USER_INPUT
-                    // 跳过清零步骤，直接开始接收用户输入
-                    else next_state = S_USER_INPUT; //否则到用户输入读取
+                    if (w_is_gen_mode) next_state = S_GEN_FILL;
+                    else next_state = S_PRE_CLEAR;
                 end
             end
 
-            // S_PRE_CLEAR 状态现在无法到达，逻辑被短路了
-            S_PRE_CLEAR: begin//预留的预先清零地址模式
+            S_PRE_CLEAR: begin
                 if (w_input_addr >= expected_count) next_state = S_USER_INPUT;
             end
 
@@ -135,6 +132,7 @@ module Input_Subsystem (
                 if (rx_pulse && is_delimiter) begin
                     // 提前判断，输入完最后一个数立刻结束，无需多按一次
                     if (w_input_addr >= expected_count - 1) next_state = S_DONE; //expected_count 是m*n，也就是需要读取多少次，当读取完成跳到done
+                    else if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_DONE;
                 end
             end
 
@@ -254,13 +252,20 @@ module Input_Subsystem (
                 S_WAIT_ADDR: begin
                     if (w_addr_ready) begin
                         w_dims_valid <= 0;
-                        w_input_addr <= 0; // 地址在此处被复位，所以跳过 PRE_CLEAR 也没问题
+                        w_input_addr <= 0; 
                     end else begin
                         w_dims_valid <= 1;
                     end
                 end
 
-                // S_PRE_CLEAR 虽然保留了代码，但不会执行
+                S_PRE_CLEAR: begin 
+                    if (w_input_addr < expected_count) begin
+                        w_input_we <= 1;
+                        w_input_data <= 0;
+                    end else begin
+                        w_input_addr <= 0;
+                    end
+                end
 
                 S_USER_INPUT: begin
                     if (rx_pulse) begin
