@@ -862,6 +862,9 @@ module FSM_Controller (
                     
                     if (w_calc_done) begin
                         w_start_calc <= 0;
+                        has_m[r_res_m-1] <= 1;
+                        has_n[r_res_n-1] <= 1;
+                        has[(r_res_m-1)*5+r_res_n-1] <= 1;
                         if (calc_match_found) begin
                             lut_idx[calc_match_index] <= ~lut_idx[calc_match_index];
                             if (lut_valid_cnt[calc_match_index] < 2) lut_valid_cnt[calc_match_index] <= lut_valid_cnt[calc_match_index] + 1;
