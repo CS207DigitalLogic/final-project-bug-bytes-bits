@@ -71,15 +71,17 @@ module FSM_Controller (
     localparam S_CALC_SHOW_MAT     = 5'd9;
     localparam S_CALC_GET_SCALAR   = 5'd10;
     localparam S_CALC_CHECK_VALID  = 5'd11;
-    localparam S_CALC_EXECUTE      = 5'd12;
-    localparam S_CALC_RES_SHOW     = 5'd13;
-    localparam S_CALC_ERROR_RESET  = 5'd14;
-    localparam S_CALC_WAIT_TIME    = 5'd15;
-    localparam S_MENU_DISP_GET_DIM = 5'd16;
-    localparam S_MENU_DISP_FILTER  = 5'd17;
-    localparam S_MENU_DISP_SHOW    = 5'd18;
-    localparam S_ERROR             = 5'd19;
-    localparam S_WAIT_DECISION     = 5'd20;
+    localparam S_CALC_GENERATION   = 5'd12;
+    localparam S_CALC_GEN_SHOW     = 5'd13;
+    localparam S_CALC_EXECUTE      = 5'd14;
+    localparam S_CALC_RES_SHOW     = 5'd15;
+    localparam S_CALC_ERROR_RESET  = 5'd16;
+    localparam S_CALC_WAIT_TIME    = 5'd17;
+    localparam S_MENU_DISP_GET_DIM = 5'd18;
+    localparam S_MENU_DISP_FILTER  = 5'd19;
+    localparam S_MENU_DISP_SHOW    = 5'd20;
+    localparam S_ERROR             = 5'd21;
+    localparam S_WAIT_DECISION     = 5'd22;
 
     localparam MAX_TYPES = 25;
 
@@ -135,7 +137,26 @@ module FSM_Controller (
     assign btn_retry_pose   = btn1_d0 & ~btn1_d1;
     assign btn_menu_pose    = btn2_d0 & ~btn2_d1; 
 
+    // 检测输入数据是否合法
+
     reg chk_valid_done;
+
+    // 随机生成运算数模式
+
+    reg is_calc_gen_mode;
+    reg chk_generation_done;
+    reg chk_disp_done;
+    reg [4:0] has_m, has_n;
+    reg [24:0] has;
+
+    reg [31:0] lfsr_reg;
+    wire [31:0] random_val;
+    assign random_val = lfsr_reg[31:0] % 10;
+
+    always @(posedge clk) begin 
+        if (!rst_n) lfsr_reg <= 32'hACE1;
+        else lfsr_reg <= {lfsr_reg[30:0], lfsr_reg[31] ^ lfsr_reg[21] ^ lfsr_reg[1]};
+    end
 
     // =========================================================================
     // 0. 辅助组合逻辑 
@@ -286,7 +307,10 @@ module FSM_Controller (
                 end
 
                 S_CALC_SHOW_SUMMARY: begin
-                    if (w_disp_done) next_state = S_CALC_GET_DIM;
+                    if (w_disp_done) begin
+                        if (is_calc_gen_mode) next_state=S_CALC_GENERATION;
+                        else next_state = S_CALC_GET_DIM;
+                    end
                 end
 
                 S_CALC_GET_DIM: begin
@@ -334,6 +358,15 @@ module FSM_Controller (
                     else if (chk_valid_done) next_state=S_CALC_EXECUTE;
                 end
 
+                S_CALC_GENERATION: begin
+                    if (w_timeout) next_state=S_ERROR;
+                    else if (chk_generation_done) next_state=S_CALC_GEN_SHOW;
+                end
+
+                S_CALC_GEN_SHOW: begin
+                    next_state=S_CALC_EXECUTE;
+                end
+
                 S_CALC_EXECUTE: begin
                     if (w_calc_done) next_state = S_CALC_RES_SHOW;
                 end
@@ -375,6 +408,11 @@ module FSM_Controller (
             lut_count <= 0; free_ptr <= 0;
             for(i=0; i<MAX_TYPES; i=i+1) lut_valid_cnt[i] <= 0;
             for(i=0; i<MAX_TYPES; i=i+1) lut_idx[i] <= 0;
+            for(i=0; i<MAX_TYPES; i=i+1) has[i] <= 0;
+            for(i=0; i<5; i=i+1) begin
+                has_m[i] <= 0;
+                has_n[i] <= 0;
+            end
             w_en_input <= 0; w_en_display <= 0; w_start_calc <= 0; w_addr_ready <= 0;
             r_res_m <= 0; r_res_n <= 0; led <= 0;
             w_op1_addr <= 0; w_op2_addr <= 0; w_res_addr <= 0;
@@ -385,6 +423,8 @@ module FSM_Controller (
             w_logic_error <= 0;
             r_scalar_val <= 0;
             chk_valid_done <= 0;
+            chk_generation_done <= 0;
+            is_calc_gen_mode <= 0;
             r_alloc_active <= 0;
             r_alloc_is_new <= 0;
             r_alloc_idx <= 0;
@@ -399,6 +439,7 @@ module FSM_Controller (
             btn2_d0 <= btn2_f; btn2_d1 <= btn2_d0; 
             
             chk_valid_done <= 0;
+            chk_generation_done <= 0;
 
             case (current_state)
                 S_IDLE: begin
@@ -457,7 +498,10 @@ module FSM_Controller (
                     end
                     if (w_rx_done) begin 
                         w_en_input <= 0;
-                        r_alloc_active <= 0; 
+                        r_alloc_active <= 0;
+                        has_m[lut_m[lut_count-1]-1] <= 1;
+                        has_n[lut_n[lut_count-1]-1] <= 1;
+                        has[(lut_m[lut_count-1]-1)*5+lut_n[lut_count-1]-1] <= 1;
                     end
                     else if (w_error_flag) begin
                         if (r_alloc_active) begin
@@ -487,6 +531,8 @@ module FSM_Controller (
                 S_CALC_SELECT_OP: begin
                     led <= 8'b0000_1000;
                     r_op_code <= sw[7:5]; w_op_code <= sw[7:5];
+                    is_calc_gen_mode <= sw[3];
+                    chk_generation_done <= 0;
                     if (sw[7:5] == 3'b000) r_target_stage <= 0; else r_target_stage <= 1; 
                     r_stage <= 0; w_logic_error <= 0; 
                 end
@@ -592,6 +638,131 @@ module FSM_Controller (
                                 w_logic_error<=1;
                         end
                     endcase
+                end
+                
+                S_CALC_GENERATION: begin
+                    w_logic_error <= 0;
+                    chk_generation_done <= 0;
+                    if (lut_count==0) w_logic_error <= 1;
+                    else begin
+                        case (r_op_code)
+                            3'b000: begin
+                                r_op1_m <= lut_m[lfsr_reg[31:0]%lut_count];
+                                r_op1_n <= lut_n[lfsr_reg[31:0]%lut_count];
+                                if (lut_valid_cnt[lfsr_reg[31:0]%lut_count]==1)
+                                    r_op1_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count];
+                                else
+                                    r_op1_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count]+
+                                        lfsr_reg[31:31]*lut_m[lfsr_reg[31:0]%lut_count]*lut_n[lfsr_reg[31:0]%lut_count];
+                                chk_generation_done <= 1;
+                            end
+                            3'b001: begin
+                                r_op1_m <= lut_m[lfsr_reg[31:0]%lut_count];
+                                r_op1_n <= lut_n[lfsr_reg[31:0]%lut_count];
+                                if (lut_valid_cnt[lfsr_reg[31:0]%lut_count]==1)
+                                    r_op1_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count];
+                                else
+                                    r_op1_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count]+
+                                        lfsr_reg[31:31]*lut_m[lfsr_reg[31:0]%lut_count]*lut_n[lfsr_reg[31:0]%lut_count];
+                                chk_generation_done <= 1;
+                                r_op2_m <= lut_m[lfsr_reg[31:0]%lut_count];
+                                r_op2_n <= lut_n[lfsr_reg[31:0]%lut_count];
+                                if (lut_valid_cnt[lfsr_reg[31:0]%lut_count]==1)
+                                    r_op2_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count];
+                                else
+                                    r_op2_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count]+
+                                        lfsr_reg[30:30]*lut_m[lfsr_reg[31:0]%lut_count]*lut_n[lfsr_reg[31:0]%lut_count];
+                            end
+                            3'b010: begin
+                                r_op1_m <= lut_m[lfsr_reg[31:0]%lut_count];
+                                r_op1_n <= lut_n[lfsr_reg[31:0]%lut_count];
+                                if (lut_valid_cnt[lfsr_reg[31:0]%lut_count]==1)
+                                    r_op1_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count];
+                                else
+                                    r_op1_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count]+
+                                        lfsr_reg[31:31]*lut_m[lfsr_reg[31:0]%lut_count]*lut_n[lfsr_reg[31:0]%lut_count];
+                                r_scalar_val <= random_val;
+                                chk_generation_done <= 1;
+                            end
+                            3'b011: begin
+                                if ((!has_m[4] || !has_n[4]) && (!has_m[3] || !has_n[3]) && (!has_m[2] || !has_n[2])
+                                    && (!has_m[1] || !has_n[1]) && (!has_m[0] || !has_n[0]))
+                                    w_logic_error <= 1;
+                                if (has_m[lfsr_reg[9:0]%5] && has_n[lfsr_reg[9:0]%5]) begin
+                                    if (has[lfsr_reg[19:10]%5*5+lfsr_reg[9:0]%5]) begin
+                                        if (has[lfsr_reg[9:0]%5*5+lfsr_reg[29:20]%5]) begin
+                                            r_op1_m <= lfsr_reg[19:10]%5;
+                                            r_op1_n <= lfsr_reg[9:0]%5;
+                                            r_op2_m <= lfsr_reg[9:0]%5;
+                                            r_op2_n <= lfsr_reg[29:20]%5;
+                                            for(i=0; i<MAX_TYPES; i=i+1) begin
+                                                if (i<lut_count) begin
+                                                    if (lut_m[i]==lfsr_reg[19:10]%5 && lut_n[i]==lfsr_reg[9:0]%5) begin
+                                                        if (lut_valid_cnt[i]==1)
+                                                            r_op1_addr <= lut_start_addr[i];
+                                                        else
+                                                            r_op1_addr <= lut_start_addr[i]+
+                                                                lfsr_reg[31:31]*lut_m[i]*lut_n[i];
+                                                    end
+                                                    if (lut_m[i]==lfsr_reg[9:0]%5 && lut_n[i]==lfsr_reg[29:20]%5) begin
+                                                        if (lut_valid_cnt[i]==1)
+                                                            r_op2_addr <= lut_start_addr[i];
+                                                        else
+                                                            r_op2_addr <= lut_start_addr[i]+
+                                                                lfsr_reg[30:30]*lut_m[i]*lut_n[i];
+                                                    end
+                                                end
+                                            end
+                                            chk_generation_done<=1;
+                                        end
+                                    end
+                                end
+                            end
+                            default: begin
+                                if ((!has_m[4] || !has_n[4]) && (!has_m[3] || !has_n[3]) && (!has_m[2] || !has_n[2])
+                                    && (!has_m[1] || !has_n[1]) && (!has_m[0] || !has_n[0]))
+                                    w_logic_error <= 1;
+                                if (has_m[lfsr_reg[9:0]%5] && has_n[lfsr_reg[9:0]%5]) begin
+                                    if (has[lfsr_reg[19:10]%5*5+lfsr_reg[9:0]%5]) begin
+                                        if (has[lfsr_reg[9:0]%5*5+lfsr_reg[29:20]%5]) begin
+                                            r_op1_m <= lfsr_reg[19:10]%5;
+                                            r_op1_n <= lfsr_reg[9:0]%5;
+                                            r_op2_m <= lfsr_reg[9:0]%5;
+                                            r_op2_n <= lfsr_reg[29:20]%5;
+                                            for(i=0; i<MAX_TYPES; i=i+1) begin
+                                                if (i<lut_count) begin
+                                                    if (lut_m[i]==lfsr_reg[19:10]%5 && lut_n[i]==lfsr_reg[9:0]%5) begin
+                                                        if (lut_valid_cnt[i]==1)
+                                                            r_op1_addr <= lut_start_addr[i];
+                                                        else
+                                                            r_op1_addr <= lut_start_addr[i]+
+                                                                lfsr_reg[31:31]*lut_m[i]*lut_n[i];
+                                                    end
+                                                    if (lut_m[i]==lfsr_reg[9:0]%5 && lut_n[i]==lfsr_reg[29:20]%5) begin
+                                                        if (lut_valid_cnt[i]==1)
+                                                            r_op2_addr <= lut_start_addr[i];
+                                                        else
+                                                            r_op2_addr <= lut_start_addr[i]+
+                                                                lfsr_reg[30:30]*lut_m[i]*lut_n[i];
+                                                    end
+                                                end
+                                            end
+                                            chk_generation_done<=1;
+                                        end
+                                    end
+                                end
+                            end
+                        endcase
+                    end
+                end
+
+                S_CALC_GEN_SHOW: begin //已经存到r_op1_*, r_op2_*, r_scalar_val
+                    w_op1_m <= r_op1_m;
+                    w_op1_n <= r_op1_n;
+                    w_op1_addr <= r_op1_addr;
+                    w_op2_m <= r_op2_m;
+                    w_op2_n <= r_op2_n;
+                    w_op2_addr <= r_op2_addr;
                 end
                 
                 S_CALC_EXECUTE: begin
