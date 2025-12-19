@@ -98,6 +98,10 @@ module Display_Subsystem (
     localparam S_SUM_SP2      = 24;
     localparam S_SUM_DONE_CR  = 25; // 发送回车 \r
     localparam S_SUM_DONE_LF  = 26; // 发送换行 \n
+
+    localparam S_SCALAR_PREP    = 30; // 标量准备
+    localparam S_SCALAR_DONE_CR = 31; // 标量回车
+    localparam S_SCALAR_DONE_LF = 32; // 标量换行
     
     // Decimal Conversion States (New Engine)
     localparam S_CONV_START   = 40;
@@ -141,6 +145,7 @@ module Display_Subsystem (
                 else if (w_disp_mode == 2) next_state = S_SUM_TOTAL;
                 else if (w_disp_mode == 3) next_state = S_CACHE_FETCH;
                 else if (w_disp_mode == 0) next_state = S_LIST_REQ;
+                else if (w_disp_mode == 4) next_state = S_SCALAR_PREP;
                 else                       next_state = S_DONE;
             end
 
@@ -201,6 +206,11 @@ module Display_Subsystem (
                                     end
                                 end else next_state = S_CACHE_FETCH;
                            end
+
+            S_SCALAR_PREP:    next_state = S_CONV_START; // 去转十进制
+            
+            S_SCALAR_DONE_CR: if (w_tx_ready) next_state = S_SCALAR_DONE_LF;
+            S_SCALAR_DONE_LF: if (w_tx_ready) next_state = S_DONE;
 
             // --- Decimal Conversion Engine ---
             S_CONV_START: next_state = S_CONV_ITER;
@@ -360,6 +370,22 @@ module Display_Subsystem (
                     end else begin
                         w_disp_tx_data <= ASC_SPACE; w_disp_tx_en <= 1; col_cnt <= col_cnt + 1;
                     end
+                end
+
+                S_SCALAR_PREP: begin
+                    r_val_to_show <= w_disp_m;        // 复用 w_disp_m 传递标量
+                    r_return_state <= S_SCALAR_DONE_CR; // 打印完数字后去打印回车
+                    r_buf_ptr <= 0;
+                end
+
+                S_SCALAR_DONE_CR: if (w_tx_ready) begin
+                    w_disp_tx_data <= ASC_CR;
+                    w_disp_tx_en <= 1;
+                end
+
+                S_SCALAR_DONE_LF: if (w_tx_ready) begin
+                    w_disp_tx_data <= ASC_LF;
+                    w_disp_tx_en <= 1;
                 end
 
                 // =============================================================

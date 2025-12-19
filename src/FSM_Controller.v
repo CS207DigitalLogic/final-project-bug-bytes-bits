@@ -259,10 +259,15 @@ module FSM_Controller (
                 w_disp_base_addr = r_op1_addr;
             end 
             else begin
-                // 展示 Op2 
-                w_disp_m = r_op2_m;
-                w_disp_n = r_op2_n;
-                w_disp_base_addr = r_op2_addr;
+                if (r_op_code == 3'b010) begin // 如果是标量乘法
+                    w_disp_m = r_scalar_val;   // 把标量值传给 w_disp_m
+                    w_disp_n = 0;              // 其他清零
+                    w_disp_base_addr = 0;
+                end else begin                 // 正常的矩阵 Op2
+                    w_disp_m = r_op2_m;
+                    w_disp_n = r_op2_n;
+                    w_disp_base_addr = r_op2_addr;
+                end
             end
         end
 
@@ -811,11 +816,7 @@ module FSM_Controller (
                                 r_stage <= 2; // 转置跳过
                             end
                             else if (r_op_code == 3'b010) begin
-                                led <= r_scalar_val[7:0]; // 这里逻辑需要改一下
-                                r_stage <= 2;
-                            end
-                            else begin
-                                // 矩阵运算：Op2 展示逻辑
+                                
                                 if (w_disp_done) begin
                                     if (w_en_display) begin
                                         w_en_display <= 0;
@@ -824,7 +825,7 @@ module FSM_Controller (
                                 end
                                 else begin
                                     w_en_display <= 1;
-                                    w_disp_mode  <= 0;
+                                    w_disp_mode  <= 4; 
                                 end
                             end
                         end
