@@ -149,6 +149,8 @@ module FSM_Controller (
     reg [4:0] has_m, has_n;
     reg [24:0] has;
 
+    reg random_error_flag;
+
     reg [31:0] lfsr_reg;
     wire [31:0] random_val;
     assign random_val = lfsr_reg[31:0] % 10;
@@ -386,7 +388,7 @@ module FSM_Controller (
                 end
 
                 S_CALC_GENERATION: begin
-                    if (w_timeout) next_state=S_ERROR;
+                    if (random_error_flag) next_state=S_ERROR;
                     else if (chk_generation_done) next_state=S_CALC_GEN_SHOW;
                 end
 
@@ -414,7 +416,6 @@ module FSM_Controller (
                     if (w_timeout) next_state = S_ERROR;                    
                     else if (w_dims_valid) next_state = S_CALC_FILTER;
                     else if (w_logic_error) next_state = S_CALC_WAIT_TIME;
-
                 end
 
                 S_WAIT_DECISION: begin
@@ -461,6 +462,7 @@ module FSM_Controller (
             r_alloc_idx <= 0;
             r_backup_free_ptr <= 0;
             r_backup_valid_cnt <= 0;
+            random_error_flag <= 0;
         end 
         else begin
             w_addr_ready <= 0; w_start_calc <= 0;
@@ -674,9 +676,9 @@ module FSM_Controller (
                 end
                 
                 S_CALC_GENERATION: begin
-                    w_logic_error <= 0;
+                    random_error_flag <= 0;
                     chk_generation_done <= 0;
-                    if (lut_count==0) w_logic_error <= 1;
+                    if (lut_count==0) random_error_flag <= 1;
                     else begin
                         case (r_op_code)
                             3'b000: begin
@@ -720,7 +722,7 @@ module FSM_Controller (
                             3'b011: begin
                                 if ((!has_m[4] || !has_n[4]) && (!has_m[3] || !has_n[3]) && (!has_m[2] || !has_n[2])
                                     && (!has_m[1] || !has_n[1]) && (!has_m[0] || !has_n[0]))
-                                    w_logic_error <= 1;
+                                    random_error_flag <= 1;
                                 if (has_m[lfsr_reg[9:0]%5] && has_n[lfsr_reg[9:0]%5]) begin
                                     if (has[lfsr_reg[19:10]%5*5+lfsr_reg[9:0]%5]) begin
                                         if (has[lfsr_reg[9:0]%5*5+lfsr_reg[29:20]%5]) begin
@@ -754,7 +756,7 @@ module FSM_Controller (
                             default: begin
                                 if ((!has_m[4] || !has_n[4]) && (!has_m[3] || !has_n[3]) && (!has_m[2] || !has_n[2])
                                     && (!has_m[1] || !has_n[1]) && (!has_m[0] || !has_n[0]))
-                                    w_logic_error <= 1;
+                                    random_error_flag <= 1;
                                 if (has_m[lfsr_reg[9:0]%5] && has_n[lfsr_reg[9:0]%5]) begin
                                     if (has[lfsr_reg[19:10]%5*5+lfsr_reg[9:0]%5]) begin
                                         if (has[lfsr_reg[9:0]%5*5+lfsr_reg[29:20]%5]) begin
@@ -893,6 +895,7 @@ module FSM_Controller (
                 S_WAIT_DECISION: led <= 8'b1000_0000;
                 S_ERROR: begin
                     w_en_input <= 0;
+                    random_error_flag <= 0;
                     led <= 8'b1111_1111;
                 end
             endcase
