@@ -113,7 +113,7 @@ module Display_Subsystem (
     localparam S_TX_PAD       = 43; // 补空格
     localparam S_DONE         = 50;
 
-    localparam COL_WIDTH      = 6;
+    localparam COL_WIDTH      = 5;
 
     reg [3:0] r_out_cnt;       // 记录当前数字输出了多少位
     reg       r_pad_en;        // 开关：只有矩阵元素才需要对齐，汇总信息不需要
@@ -275,7 +275,7 @@ module Display_Subsystem (
 
             case (state)
                 S_INIT: begin
-                    mat_idx <= 0; row_cnt <= 0; col_cnt <= 0; tx_step <= 0;
+                    mat_idx <= 0; row_cnt <= 0; col_cnt <= 0; tx_step <= 0;r_pad_en <= 0;
                     
                     // 【修复核心】：Mode 0 (单矩阵) 和 Mode 1 (列表) 都会写缓存，必须同步更新缓存维度！
                     if (w_disp_mode == 1 || w_disp_mode == 0) begin 
