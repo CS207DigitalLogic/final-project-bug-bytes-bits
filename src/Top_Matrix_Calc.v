@@ -5,7 +5,8 @@ module Top_Module (
     input wire uart_rx,      
     output wire uart_tx,     
     
-    input wire [7:0] sw,     
+    input wire [7:0] sw,    
+    input wire [7:0] ssw, 
     input wire [4:0] btn,    
     output wire [7:0] led,   
     
@@ -216,7 +217,7 @@ module Top_Module (
         // Timer 运行条件：有错误发生 且 还没死机
         .i_en( (w_logic_error) && (w_state != S_ERROR) ), 
         
-        .sw(4'd10), 
+        .sw(ssw[3:0]), 
         .w_timeout(w_timeout),
         .w_time_val(w_timer_val)
     );
