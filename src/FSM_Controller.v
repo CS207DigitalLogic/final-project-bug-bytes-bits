@@ -450,6 +450,7 @@ module FSM_Controller (
                 has_m[i] <= 0;
                 has_n[i] <= 0;
             end
+            w_is_gen_mode <= 0;
             w_en_input <= 0; w_en_display <= 0; w_start_calc <= 0; w_addr_ready <= 0;
             r_res_m <= 0; r_res_n <= 0; led <= 0;
             w_op1_addr <= 0; w_op2_addr <= 0; w_res_addr <= 0;
@@ -470,7 +471,7 @@ module FSM_Controller (
             random_error_flag <= 0;
         end 
         else begin
-            w_addr_ready <= 0; w_start_calc <= 0;
+            w_addr_ready <= 0; w_start_calc <= 0; w_is_gen_mode <= 0;
 
             btn0_d0 <= btn0_f; btn0_d1 <= btn0_d0;
             btn1_d0 <= btn1_f; btn1_d1 <= btn1_d0;
