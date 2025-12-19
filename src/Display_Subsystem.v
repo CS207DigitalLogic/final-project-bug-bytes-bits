@@ -102,6 +102,9 @@ module Display_Subsystem (
     localparam S_SCALAR_PREP    = 30; // 标量准备
     localparam S_SCALAR_DONE_CR = 31; // 标量回车
     localparam S_SCALAR_DONE_LF = 32; // 标量换行
+
+    localparam S_PRE_PRINT_CR   = 33; // 打印前回车
+    localparam S_PRE_PRINT_LF   = 34; // 打印前换行
     
     // Decimal Conversion States (New Engine)
     localparam S_CONV_START   = 40;
@@ -148,8 +151,7 @@ module Display_Subsystem (
             S_INIT: begin
                 if (w_disp_mode == 1)      next_state = S_LIST_SHOW_ID;
                 else if (w_disp_mode == 2) next_state = S_SUM_TOTAL;
-                else if (w_disp_mode == 3) next_state = S_CACHE_FETCH;
-                else if (w_disp_mode == 0) next_state = S_LIST_REQ;
+                else if (w_disp_mode == 0 || w_disp_mode == 3) next_state = S_PRE_PRINT_CR;
                 else if (w_disp_mode == 4) next_state = S_SCALAR_PREP;
                 else                       next_state = S_DONE;
             end
@@ -216,6 +218,9 @@ module Display_Subsystem (
             
             S_SCALAR_DONE_CR: if (w_tx_ready) next_state = S_SCALAR_DONE_LF;
             S_SCALAR_DONE_LF: if (w_tx_ready) next_state = S_DONE;
+
+            S_PRE_PRINT_CR: if (w_tx_ready) next_state = S_PRE_PRINT_LF;
+            S_PRE_PRINT_LF: if (w_tx_ready) next_state = r_return_state;
 
             // --- Decimal Conversion Engine ---
             S_CONV_START: next_state = S_CONV_ITER;
@@ -288,6 +293,9 @@ module Display_Subsystem (
                     else if (w_disp_mode == 0) begin
                         mat_idx <= 0;
                     end
+
+                    if (w_disp_mode == 0)      r_return_state <= S_LIST_REQ;    // Mode 0 去矩阵请求
+                    else if (w_disp_mode == 3) r_return_state <= S_CACHE_FETCH; // Mode 3 去缓存读取
                 end
 
                 // --- Summary Data Prep ---
@@ -403,6 +411,19 @@ module Display_Subsystem (
                 S_SCALAR_DONE_LF: if (w_tx_ready) begin
                     w_disp_tx_data <= ASC_LF;
                     w_disp_tx_en <= 1;
+                end
+
+                S_PRE_PRINT_CR: begin
+                    if (w_tx_ready) begin
+                        w_disp_tx_data <= ASC_CR;
+                        w_disp_tx_en <= 1;
+                    end
+                end
+                S_PRE_PRINT_LF: begin
+                    if (w_tx_ready) begin
+                        w_disp_tx_data <= ASC_LF;
+                        w_disp_tx_en <= 1;
+                    end
                 end
 
                 // =============================================================
