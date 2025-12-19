@@ -24,7 +24,7 @@ module Top_Module (
     wire [1:0] w_task_mode;
     wire w_addr_ready;
     wire [8:0] w_base_addr_to_input;
-    wire [1:0] w_disp_mode;
+    wire [2:0] w_disp_mode;
     wire [8:0] w_disp_base_addr;
     wire [1:0] w_disp_total_cnt;
     wire [31:0] w_disp_m, w_disp_n;

@@ -113,7 +113,7 @@ module Display_Subsystem (
     localparam S_TX_PAD       = 43; // 补空格
     localparam S_DONE         = 50;
 
-    localparam COL_WIDTH      = 10;
+    localparam COL_WIDTH      = 6;
 
     reg [3:0] r_out_cnt;       // 记录当前数字输出了多少位
     reg       r_pad_en;        // 开关：只有矩阵元素才需要对齐，汇总信息不需要
