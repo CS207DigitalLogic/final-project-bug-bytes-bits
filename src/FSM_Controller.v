@@ -837,6 +837,14 @@ module FSM_Controller (
                 S_CALC_EXECUTE: begin
                     w_start_calc <= 1; w_op_code <= r_op_code; w_res_addr <= calc_final_addr;
 
+                    w_op1_addr <= r_op1_addr;
+                    w_op1_m    <= r_op1_m;
+                    w_op1_n    <= r_op1_n;
+                    
+                    w_op2_addr <= r_op2_addr;
+                    w_op2_m    <= r_op2_m;
+                    w_op2_n    <= r_op2_n;
+
                     case(r_op_code)
                         3'b000: begin r_res_m <= r_op1_n; r_res_n <= r_op1_m; end
                         3'b001: begin r_res_m <= r_op1_m; r_res_n <= r_op1_n; end
