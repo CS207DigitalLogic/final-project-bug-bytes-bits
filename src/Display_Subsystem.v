@@ -7,7 +7,7 @@ module Display_Subsystem (
     // --- FSM 控制接口 ---
     input wire w_en_display,          // 启动展示
     // 0=单矩阵(Storage), 1=列表(Storage+Cache), 2=汇总, 3=缓存回显(Cache)
-    input wire [1:0] w_disp_mode,
+    input wire [2:0] w_disp_mode,
 
     // 矩阵参数
     input wire [31:0] w_disp_m,       // 矩阵行数
@@ -107,8 +107,13 @@ module Display_Subsystem (
     localparam S_CONV_START   = 40;
     localparam S_CONV_ITER    = 41;
     localparam S_TX_DIGIT     = 42;
-
+    localparam S_TX_PAD       = 43; // 补空格
     localparam S_DONE         = 50;
+
+    localparam COL_WIDTH      = 10;
+
+    reg [3:0] r_out_cnt;       // 记录当前数字输出了多少位
+    reg       r_pad_en;        // 开关：只有矩阵元素才需要对齐，汇总信息不需要
 
     reg [5:0] state, next_state;
     reg [1:0] mat_idx;
@@ -223,9 +228,17 @@ module Display_Subsystem (
             S_TX_DIGIT:   begin
                 if (w_tx_ready) begin
                     // Buffer empty?
-                    if (r_buf_ptr == 0) next_state = r_return_state; // Return to caller
+                    if (r_buf_ptr == 0) next_state = S_TX_PAD; // Return to caller
                     else next_state = S_TX_DIGIT;
                 end
+            end
+
+            S_TX_PAD: begin
+                // 如果开启了对齐功能(r_pad_en) 且 输出字符数 < 列宽，就继续待在这里补空格
+                if (r_pad_en && w_tx_ready && r_out_cnt < COL_WIDTH) 
+                    next_state = S_TX_PAD;
+                else if (w_tx_ready) // 补完了（或者不需要补），才返回
+                    next_state = r_return_state;
             end
 
             // --- Done ---
@@ -249,6 +262,7 @@ module Display_Subsystem (
             mat_idx <= 0; row_cnt <= 0; col_cnt <= 0; tx_step <= 0;
             r_cached_m <= 0; r_cached_n <= 0; o_lut_idx_req <= 0;
             r_buf_ptr <= 0; r_temp_val <= 0; r_val_to_show <= 0; r_return_state <= S_IDLE;
+            r_out_cnt <= 0; r_pad_en <= 0;
         end 
         else begin
             w_disp_done <= 0;
@@ -335,6 +349,7 @@ module Display_Subsystem (
                     r_val_to_show <= w_storage_rdata;
                     r_return_state <= S_LIST_SEP;
                     tx_step <= 0;
+                    r_pad_en <= 1;
                 end
 
                 S_LIST_SEP: if (w_tx_ready) begin
@@ -357,6 +372,7 @@ module Display_Subsystem (
                     r_val_to_show <= cache_rdata;
                     r_return_state <= S_CACHE_SEP;
                     tx_step <= 0;
+                    r_pad_en <= 1;
                 end
                 
                 S_CACHE_SEP: if (w_tx_ready) begin
@@ -394,6 +410,7 @@ module Display_Subsystem (
                 S_CONV_START: begin
                     r_temp_val <= r_val_to_show;
                     r_buf_ptr <= 0; // Starts from 0
+                    r_out_cnt <= 0;
                 end
 
                 S_CONV_ITER: begin
@@ -413,6 +430,17 @@ module Display_Subsystem (
                         w_disp_tx_data <= r_dec_buf[r_buf_ptr];
                         w_disp_tx_en <= 1;
                         if (r_buf_ptr > 0) r_buf_ptr <= r_buf_ptr - 1;
+                        r_out_cnt <= r_out_cnt + 1;
+                    end
+                end
+
+                S_TX_PAD: begin
+                    if (r_pad_en && r_out_cnt < COL_WIDTH) begin
+                        if (w_tx_ready) begin
+                            w_disp_tx_data <= ASC_SPACE; // 发送空格
+                            w_disp_tx_en <= 1;
+                            r_out_cnt <= r_out_cnt + 1;  // 计入总宽度
+                        end
                     end
                 end
 

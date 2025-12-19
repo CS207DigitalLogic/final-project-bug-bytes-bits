@@ -29,7 +29,7 @@ module FSM_Controller (
     input wire [4:0] i_disp_lut_idx_req, 
     
     output reg w_en_display,          
-    output reg [1:0] w_disp_mode,     
+    output reg [2:0] w_disp_mode,     
     output reg [8:0] w_disp_base_addr,
     output reg [1:0] w_disp_total_cnt,
     output reg [31:0] w_disp_m,       
