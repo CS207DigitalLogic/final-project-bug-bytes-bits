@@ -724,20 +724,20 @@ module FSM_Controller (
                                 if (has_m[lfsr_reg[9:0]%5] && has_n[lfsr_reg[9:0]%5]) begin
                                     if (has[lfsr_reg[19:10]%5*5+lfsr_reg[9:0]%5]) begin
                                         if (has[lfsr_reg[9:0]%5*5+lfsr_reg[29:20]%5]) begin
-                                            r_op1_m <= lfsr_reg[19:10]%5;
-                                            r_op1_n <= lfsr_reg[9:0]%5;
-                                            r_op2_m <= lfsr_reg[9:0]%5;
-                                            r_op2_n <= lfsr_reg[29:20]%5;
+                                            r_op1_m <= lfsr_reg[19:10]%5+1;
+                                            r_op1_n <= lfsr_reg[9:0]%5+1;
+                                            r_op2_m <= lfsr_reg[9:0]%5+1;
+                                            r_op2_n <= lfsr_reg[29:20]%5+1;
                                             for(i=0; i<MAX_TYPES; i=i+1) begin
                                                 if (i<lut_count) begin
-                                                    if (lut_m[i]==lfsr_reg[19:10]%5 && lut_n[i]==lfsr_reg[9:0]%5) begin
+                                                    if (lut_m[i]==lfsr_reg[19:10]%5+1 && lut_n[i]==lfsr_reg[9:0]%5+1) begin
                                                         if (lut_valid_cnt[i]==1)
                                                             r_op1_addr <= lut_start_addr[i];
                                                         else
                                                             r_op1_addr <= lut_start_addr[i]+
                                                                 lfsr_reg[31:31]*lut_m[i]*lut_n[i];
                                                     end
-                                                    if (lut_m[i]==lfsr_reg[9:0]%5 && lut_n[i]==lfsr_reg[29:20]%5) begin
+                                                    if (lut_m[i]==lfsr_reg[9:0]%5+1 && lut_n[i]==lfsr_reg[29:20]%5+1) begin
                                                         if (lut_valid_cnt[i]==1)
                                                             r_op2_addr <= lut_start_addr[i];
                                                         else
@@ -758,20 +758,20 @@ module FSM_Controller (
                                 if (has_m[lfsr_reg[9:0]%5] && has_n[lfsr_reg[9:0]%5]) begin
                                     if (has[lfsr_reg[19:10]%5*5+lfsr_reg[9:0]%5]) begin
                                         if (has[lfsr_reg[9:0]%5*5+lfsr_reg[29:20]%5]) begin
-                                            r_op1_m <= lfsr_reg[19:10]%5;
-                                            r_op1_n <= lfsr_reg[9:0]%5;
-                                            r_op2_m <= lfsr_reg[9:0]%5;
-                                            r_op2_n <= lfsr_reg[29:20]%5;
+                                            r_op1_m <= lfsr_reg[19:10]%5+1;
+                                            r_op1_n <= lfsr_reg[9:0]%5+1;
+                                            r_op2_m <= lfsr_reg[9:0]%5+1;
+                                            r_op2_n <= lfsr_reg[29:20]%5+1;
                                             for(i=0; i<MAX_TYPES; i=i+1) begin
                                                 if (i<lut_count) begin
-                                                    if (lut_m[i]==lfsr_reg[19:10]%5 && lut_n[i]==lfsr_reg[9:0]%5) begin
+                                                    if (lut_m[i]==lfsr_reg[19:10]%5+1 && lut_n[i]==lfsr_reg[9:0]%5+1) begin
                                                         if (lut_valid_cnt[i]==1)
                                                             r_op1_addr <= lut_start_addr[i];
                                                         else
                                                             r_op1_addr <= lut_start_addr[i]+
                                                                 lfsr_reg[31:31]*lut_m[i]*lut_n[i];
                                                     end
-                                                    if (lut_m[i]==lfsr_reg[9:0]%5 && lut_n[i]==lfsr_reg[29:20]%5) begin
+                                                    if (lut_m[i]==lfsr_reg[9:0]%5+1 && lut_n[i]==lfsr_reg[29:20]%5+1) begin
                                                         if (lut_valid_cnt[i]==1)
                                                             r_op2_addr <= lut_start_addr[i];
                                                         else
