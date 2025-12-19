@@ -73,12 +73,13 @@ module FSM_Controller (
     localparam S_CALC_CHECK_VALID  = 5'd11;
     localparam S_CALC_EXECUTE      = 5'd12;
     localparam S_CALC_RES_SHOW     = 5'd13;
-    localparam S_CALC_WAIT_TIME    = 5'd14;
-    localparam S_MENU_DISP_GET_DIM = 5'd15;
-    localparam S_MENU_DISP_FILTER  = 5'd16;
-    localparam S_MENU_DISP_SHOW    = 5'd17;
-    localparam S_ERROR             = 5'd18;
-    localparam S_WAIT_DECISION     = 5'd19;
+    localparam S_CALC_ERROR_RESET  = 5'd14;
+    localparam S_CALC_WAIT_TIME    = 5'd15;
+    localparam S_MENU_DISP_GET_DIM = 5'd16;
+    localparam S_MENU_DISP_FILTER  = 5'd17;
+    localparam S_MENU_DISP_SHOW    = 5'd18;
+    localparam S_ERROR             = 5'd19;
+    localparam S_WAIT_DECISION     = 5'd20;
 
     localparam MAX_TYPES = 25;
 
@@ -289,7 +290,7 @@ module FSM_Controller (
                 end
 
                 S_CALC_GET_DIM: begin
-                    if (w_logic_error) next_state = S_CALC_WAIT_TIME;
+                    if (w_logic_error) next_state = S_CALC_ERROR_RESET;
                     else if (w_dims_valid) next_state = S_CALC_FILTER;
                 end
 
@@ -303,7 +304,7 @@ module FSM_Controller (
                 end
 
                 S_CALC_GET_ID: begin
-                    if (w_logic_error) next_state = S_CALC_WAIT_TIME;
+                    if (w_logic_error) next_state = S_CALC_ERROR_RESET;
                     else if (w_id_valid) begin
                         if (i_input_id_val > 0 && i_input_id_val <= lut_valid_cnt[r_hit_type_idx])
                             next_state = S_CALC_SHOW_MAT;
@@ -329,7 +330,7 @@ module FSM_Controller (
                 end
 
                 S_CALC_CHECK_VALID: begin
-                    if (w_logic_error) next_state=S_CALC_WAIT_TIME;
+                    if (w_logic_error) next_state=S_CALC_ERROR_RESET;
                     else if (chk_valid_done) next_state=S_CALC_EXECUTE;
                 end
 
@@ -341,9 +342,13 @@ module FSM_Controller (
                     if (w_disp_done) next_state = S_WAIT_DECISION;
                 end
 
+                S_CALC_ERROR_RESET: begin
+                    next_state = S_CALC_WAIT_TIME;
+                end
+
                 S_CALC_WAIT_TIME: begin
                     if (w_timeout) next_state = S_ERROR;
-                    else if (w_logic_error) next_state=S_CALC_WAIT_TIME;
+                    else if (w_logic_error) next_state = S_CALC_WAIT_TIME;
                     else if (w_dims_valid) next_state = S_CALC_FILTER;
                 end
 
@@ -623,9 +628,12 @@ module FSM_Controller (
                     w_en_display <= 1; w_disp_mode <= 0; 
                     if (w_disp_done) w_en_display <= 0;
                 end
+                S_CALC_ERROR_RESET: begin
+                    r_stage <= 0;
+                    w_en_input <= 0;
+                end
                 S_CALC_WAIT_TIME: begin
                     led <= 8'b1111_1111;
-                    r_stage <= 0;
                     w_en_input <= 1; w_task_mode <= 1; 
                     if (w_dims_valid) begin 
                         w_en_input <= 0; 
@@ -633,7 +641,10 @@ module FSM_Controller (
                     end
                 end
                 S_WAIT_DECISION: led <= 8'b1000_0000;
-                S_ERROR: led <= 8'b1111_1111;
+                S_ERROR: begin
+                    w_en_input <= 0;
+                    led <= 8'b1111_1111;
+                end
             endcase
         end
     end

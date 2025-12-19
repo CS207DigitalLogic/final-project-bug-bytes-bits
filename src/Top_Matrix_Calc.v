@@ -89,8 +89,8 @@ module Top_Module (
     // =========================================================================
     
     localparam S_CALC_START = 5'd3;  
-    localparam S_CALC_END   = 5'd14; 
-    localparam S_ERROR      = 5'd18; 
+    localparam S_CALC_END   = 5'd15; 
+    localparam S_ERROR      = 5'd19; 
 
     reg [4:0] state_d;
     reg w_input_error_d;
