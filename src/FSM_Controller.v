@@ -347,9 +347,10 @@ module FSM_Controller (
                 end
 
                 S_CALC_WAIT_TIME: begin
-                    if (w_timeout) next_state = S_ERROR;
-                    else if (w_logic_error) next_state = S_CALC_WAIT_TIME;
+                    if (w_timeout) next_state = S_ERROR;                    
                     else if (w_dims_valid) next_state = S_CALC_FILTER;
+                    else if (w_logic_error) next_state = S_CALC_WAIT_TIME;
+
                 end
 
                 S_WAIT_DECISION: begin
