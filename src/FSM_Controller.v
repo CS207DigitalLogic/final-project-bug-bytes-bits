@@ -98,7 +98,7 @@ module FSM_Controller (
 
     // 上下文
     reg [2:0] r_op_code;
-    reg       r_stage;
+    reg [1:0] r_stage;
     reg       r_target_stage;
     reg [4:0] r_hit_type_idx; 
     reg       r_hit_found;
@@ -225,22 +225,49 @@ module FSM_Controller (
     end
 
     always @(*) begin
+        // 1. 默认值
         w_disp_m = 0; w_disp_n = 0; w_disp_total_cnt = 0; w_disp_base_addr = 0;
+        // 2. 根据状态或模式选择输出
         if (w_disp_mode == 2) begin 
-            w_disp_m = lut_m[i_disp_lut_idx_req]; w_disp_n = lut_n[i_disp_lut_idx_req];
+            // 汇总模式 
+            w_disp_m = lut_m[i_disp_lut_idx_req];
+            w_disp_n = lut_n[i_disp_lut_idx_req];
             w_disp_total_cnt = lut_valid_cnt[i_disp_lut_idx_req];
             w_disp_base_addr = 0;
         end 
         else if (current_state == S_CALC_RES_SHOW) begin
-            w_disp_m = r_res_m; w_disp_n = r_res_n;
+            // 结果显示 
+            w_disp_m = r_res_m;
+            w_disp_n = r_res_n;
             w_disp_total_cnt = 1; w_disp_base_addr = w_res_addr;
         end
         else if (current_state == S_MENU_DISP_SHOW) begin
-            w_disp_m = i_dim_m; w_disp_n = i_dim_n;
+            // 菜单显示 
+            w_disp_m = i_dim_m;
+            w_disp_n = i_dim_n;
             w_disp_total_cnt = 1; w_disp_base_addr = free_ptr;
         end
+        
+        else if (current_state == S_CALC_GEN_SHOW) begin
+            w_disp_total_cnt = 1; 
+            if (r_stage == 0) begin
+                // 展示 Op1
+                w_disp_m = r_op1_m;
+                w_disp_n = r_op1_n;
+                w_disp_base_addr = r_op1_addr;
+            end 
+            else begin
+                // 展示 Op2 
+                w_disp_m = r_op2_m;
+                w_disp_n = r_op2_n;
+                w_disp_base_addr = r_op2_addr;
+            end
+        end
+
         else begin 
-            w_disp_m = lut_m[r_hit_type_idx]; w_disp_n = lut_n[r_hit_type_idx];
+            // 默认列表模式/详情模式 
+            w_disp_m = lut_m[r_hit_type_idx];
+            w_disp_n = lut_n[r_hit_type_idx];
             w_disp_total_cnt = lut_valid_cnt[r_hit_type_idx];
             w_disp_base_addr = lut_start_addr[r_hit_type_idx];
         end
@@ -364,7 +391,11 @@ module FSM_Controller (
                 end
 
                 S_CALC_GEN_SHOW: begin
-                    next_state=S_CALC_EXECUTE;
+                    // 阶段 0: 展示 Op1
+                    // 阶段 1: 展示 Op2 
+                    // 阶段 2: 展示完毕，去执行
+                    if (r_stage == 2) next_state = S_CALC_EXECUTE;
+                    else next_state = S_CALC_GEN_SHOW; // 还没展示完，保持在当前状态
                 end
 
                 S_CALC_EXECUTE: begin
@@ -654,7 +685,7 @@ module FSM_Controller (
                                 else
                                     r_op1_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count]+
                                         lfsr_reg[31:31]*lut_m[lfsr_reg[31:0]%lut_count]*lut_n[lfsr_reg[31:0]%lut_count];
-                                chk_generation_done <= 1;
+                                chk_generation_done <= 1; r_stage <= 0;
                             end
                             3'b001: begin
                                 r_op1_m <= lut_m[lfsr_reg[31:0]%lut_count];
@@ -664,7 +695,7 @@ module FSM_Controller (
                                 else
                                     r_op1_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count]+
                                         lfsr_reg[31:31]*lut_m[lfsr_reg[31:0]%lut_count]*lut_n[lfsr_reg[31:0]%lut_count];
-                                chk_generation_done <= 1;
+                                chk_generation_done <= 1;r_stage <= 0;
                                 r_op2_m <= lut_m[lfsr_reg[31:0]%lut_count];
                                 r_op2_n <= lut_n[lfsr_reg[31:0]%lut_count];
                                 if (lut_valid_cnt[lfsr_reg[31:0]%lut_count]==1)
@@ -682,7 +713,7 @@ module FSM_Controller (
                                     r_op1_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count]+
                                         lfsr_reg[31:31]*lut_m[lfsr_reg[31:0]%lut_count]*lut_n[lfsr_reg[31:0]%lut_count];
                                 r_scalar_val <= random_val;
-                                chk_generation_done <= 1;
+                                chk_generation_done <= 1;r_stage <= 0;
                             end
                             3'b011: begin
                                 if ((!has_m[4] || !has_n[4]) && (!has_m[3] || !has_n[3]) && (!has_m[2] || !has_n[2])
@@ -713,7 +744,7 @@ module FSM_Controller (
                                                     end
                                                 end
                                             end
-                                            chk_generation_done<=1;
+                                            chk_generation_done<=1;r_stage <= 0;
                                         end
                                     end
                                 end
@@ -747,7 +778,7 @@ module FSM_Controller (
                                                     end
                                                 end
                                             end
-                                            chk_generation_done<=1;
+                                            chk_generation_done<=1;r_stage <= 0;
                                         end
                                     end
                                 end
@@ -756,17 +787,60 @@ module FSM_Controller (
                     end
                 end
 
-                S_CALC_GEN_SHOW: begin //已经存到r_op1_*, r_op2_*, r_scalar_val
-                    w_op1_m <= r_op1_m;
-                    w_op1_n <= r_op1_n;
-                    w_op1_addr <= r_op1_addr;
-                    w_op2_m <= r_op2_m;
-                    w_op2_n <= r_op2_n;
-                    w_op2_addr <= r_op2_addr;
+
+                S_CALC_GEN_SHOW: begin
+                    case (r_stage)
+                        0: begin 
+                            if (w_disp_done) begin
+                                if (w_en_display) begin
+                                    w_en_display <= 0;
+                                    r_stage <= 1; 
+                                end
+                            end
+                            else begin
+                                w_en_display <= 1;
+                                w_disp_mode  <= 0;
+                            end
+                        end
+                        1: begin 
+                            if (r_op_code == 3'b000) begin
+                                r_stage <= 2; // 转置跳过
+                            end
+                            else if (r_op_code == 3'b010) begin
+                                led <= r_scalar_val[7:0]; // 这里逻辑需要改一下
+                                r_stage <= 2;
+                            end
+                            else begin
+                                // 矩阵运算：Op2 展示逻辑
+                                if (w_disp_done) begin
+                                    if (w_en_display) begin
+                                        w_en_display <= 0;
+                                        r_stage <= 2; 
+                                    end
+                                end
+                                else begin
+                                    w_en_display <= 1;
+                                    w_disp_mode  <= 0;
+                                end
+                            end
+                        end
+
+                        2: begin 
+                            // 等待 Stage 2 跳转
+                            w_en_display <= 0;
+                        end
+                    endcase
                 end
                 
                 S_CALC_EXECUTE: begin
                     w_start_calc <= 1; w_op_code <= r_op_code; w_res_addr <= calc_final_addr;
+                    w_op1_addr <= r_op1_addr;
+                    w_op1_m    <= r_op1_m;
+                    w_op1_n    <= r_op1_n;
+                    
+                    w_op2_addr <= r_op2_addr;
+                    w_op2_m    <= r_op2_m;
+                    w_op2_n    <= r_op2_n;
                     case(r_op_code)
                         3'b000: begin r_res_m <= r_op1_n; r_res_n <= r_op1_m; end
                         3'b001: begin r_res_m <= r_op1_m; r_res_n <= r_op1_n; end
