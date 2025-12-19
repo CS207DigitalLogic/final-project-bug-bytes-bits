@@ -608,10 +608,12 @@ module FSM_Controller (
                             r_selected_id <= i_input_id_val[1:0];
                             if (r_stage == 0) begin
                                 w_op1_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
+                                r_op1_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
                                 w_op1_m <= lut_m[r_hit_type_idx]; w_op1_n <= lut_n[r_hit_type_idx];
                                 r_op1_m <= i_dim_m; r_op1_n <= i_dim_n;
                             end else begin
                                 w_op2_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
+                                r_op2_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
                                 w_op2_m <= lut_m[r_hit_type_idx]; w_op2_n <= lut_n[r_hit_type_idx];
                                 r_op2_m <= i_dim_m; r_op2_n <= i_dim_n;
                             end
@@ -834,13 +836,7 @@ module FSM_Controller (
                 
                 S_CALC_EXECUTE: begin
                     w_start_calc <= 1; w_op_code <= r_op_code; w_res_addr <= calc_final_addr;
-                    w_op1_addr <= r_op1_addr;
-                    w_op1_m    <= r_op1_m;
-                    w_op1_n    <= r_op1_n;
-                    
-                    w_op2_addr <= r_op2_addr;
-                    w_op2_m    <= r_op2_m;
-                    w_op2_n    <= r_op2_n;
+
                     case(r_op_code)
                         3'b000: begin r_res_m <= r_op1_n; r_res_n <= r_op1_m; end
                         3'b001: begin r_res_m <= r_op1_m; r_res_n <= r_op1_n; end
