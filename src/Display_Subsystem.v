@@ -392,6 +392,7 @@ module Display_Subsystem (
                     r_val_to_show <= w_disp_m;        // 复用 w_disp_m 传递标量
                     r_return_state <= S_SCALAR_DONE_CR; // 打印完数字后去打印回车
                     r_buf_ptr <= 0;
+                    r_pad_en <= 0;
                 end
 
                 S_SCALAR_DONE_CR: if (w_tx_ready) begin
