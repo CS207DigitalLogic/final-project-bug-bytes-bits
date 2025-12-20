@@ -904,6 +904,7 @@ module FSM_Controller (
                 S_CALC_ERROR_RESET: begin
                     r_stage <= 0;
                     w_en_input <= 0;
+                    w_logic_error <= 0;
                 end
                 S_CALC_WAIT_TIME: begin
                     led <= 8'b1111_1111;
