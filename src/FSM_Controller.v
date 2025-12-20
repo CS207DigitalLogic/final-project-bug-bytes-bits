@@ -660,7 +660,7 @@ module FSM_Controller (
                     case (r_op_code)
                         3'b000: chk_valid_done<=1;
                         3'b001: begin
-                            if (r_op1_m==r_op1_n && r_op2_m==r_op2_n)
+                            if (r_op1_m==r_op2_m && r_op1_n==r_op2_n)
                                 chk_valid_done<=1;
                             else
                                 w_logic_error<=1;
