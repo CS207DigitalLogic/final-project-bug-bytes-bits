@@ -353,11 +353,12 @@ module FSM_Controller (
                 end
 
                 S_CALC_FILTER: begin
-                    next_state = S_CALC_SHOW_LIST;
+                    if (w_logic_error) next_state = S_CALC_ERROR_RESET; 
+                    else next_state = S_CALC_SHOW_LIST;
                 end
 
                 S_CALC_SHOW_LIST: begin
-                    if (r_hit_found == 0) next_state = S_CALC_GET_DIM; 
+                    if (w_logic_error) next_state = S_CALC_ERROR_RESET; 
                     else if (w_disp_done) next_state = S_CALC_GET_ID;
                 end
 
@@ -583,13 +584,15 @@ module FSM_Controller (
                 S_CALC_GET_DIM: begin
                     w_en_input <= 1; w_task_mode <= 1; 
                     if (w_dims_valid) begin 
-                        w_en_input <= 0; 
-                        w_logic_error <= 0; 
+                        w_en_input <= 0;
+                        w_logic_error <= 0;
                     end
                 end
 
                 S_CALC_FILTER: begin
                     led <= 8'b0000_1000;
+                    if (has[(i_dim_m-1)*5+i_dim_n-1]) w_logic_error <= 0;
+                    else w_logic_error <= 1; 
                     r_hit_found <= 0; r_hit_type_idx <= 0;
                     for (i=0; i<MAX_TYPES; i=i+1) begin
                         if (i < lut_count && lut_m[i] == i_dim_m && lut_n[i] == i_dim_n && lut_valid_cnt[i] > 0) begin
@@ -599,7 +602,7 @@ module FSM_Controller (
                 end
 
                 S_CALC_SHOW_LIST: begin
-                    if (r_hit_found == 0) begin
+                    if (!r_hit_found) begin
                         w_logic_error <= 1; 
                     end
                     else begin
