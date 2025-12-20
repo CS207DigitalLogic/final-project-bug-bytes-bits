@@ -812,12 +812,28 @@ module FSM_Controller (
                                 w_disp_mode  <= 0;
                             end
                         end
+
+
                         1: begin 
                             if (r_op_code == 3'b000) begin
-                                r_stage <= 2; // 转置跳过
+                                r_stage <= 2;
+                                // 转置
                             end
                             else if (r_op_code == 3'b010) begin
-                                
+                                // 标量乘法展示逻辑
+                                if (w_disp_done) begin
+                                    if (w_en_display) begin
+                                        w_en_display <= 0;
+                                        r_stage <= 2;
+                                    end
+                                end
+                                else begin
+                                    w_en_display <= 1;
+                                    w_disp_mode  <= 4; 
+                                end
+                            end
+                        
+                            else begin
                                 if (w_disp_done) begin
                                     if (w_en_display) begin
                                         w_en_display <= 0;
@@ -826,7 +842,7 @@ module FSM_Controller (
                                 end
                                 else begin
                                     w_en_display <= 1;
-                                    w_disp_mode  <= 4; 
+                                    w_disp_mode  <= 0; 
                                 end
                             end
                         end
