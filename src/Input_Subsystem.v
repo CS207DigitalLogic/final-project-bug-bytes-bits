@@ -230,8 +230,9 @@ module Input_Subsystem (
                 S_RX_M: begin
                     if (rx_pulse) begin
                         if (is_digit) begin
-                            w_error_flag <= 0;
-                            current_value <= current_value * 10 + (rx_data - ASC_0);
+                            if (!w_error_flag) begin
+                                    current_value <= current_value * 10 + (rx_data - ASC_0);
+                                end
                         end
                         else if (is_delimiter) begin
                             if (w_task_mode == 2) begin  //读矩阵编号模式
