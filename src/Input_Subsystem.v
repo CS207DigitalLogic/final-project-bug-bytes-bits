@@ -119,7 +119,6 @@ module Input_Subsystem (
             S_RX_M: begin //读取第一个维度
                 if (rx_pulse && is_delimiter) begin//这些都提前预测输入值是否正确，从而确定状态跳转逻辑
                     if (w_error_flag) next_state = S_ERROR_FLUSH;
-                    else if (current_value == 0) next_state = S_RX_M;
                     else if (current_value >= 1 && current_value <= 5) next_state = S_RX_N; //输入值合法，则跳到读取第二个维度
                     else begin
                         // 如果是回车结束的，直接重置等待下一次输入
@@ -133,7 +132,6 @@ module Input_Subsystem (
             S_RX_N: begin //读取第二个维度
                 if (rx_pulse && is_delimiter) begin
                     if (w_error_flag) next_state = S_ERROR_FLUSH;
-                    else if (current_value == 0) next_state = S_RX_N;
                     else if (current_value >= 1 && current_value <= 5) begin
                         if (w_is_gen_mode) next_state = S_RX_COUNT; //状态合法并且是生成模式，则跳到读count（要生成几个矩阵）
                         else next_state = S_WAIT_ADDR; //状态合法并且是输入模式， 则跳到等FSM分配地址
@@ -148,8 +146,8 @@ module Input_Subsystem (
 
             S_RX_COUNT: begin
                 if (rx_pulse && is_delimiter) begin
-                    if (current_value == 0) next_state = S_RX_COUNT;
-                    else if (current_value >= 1 && current_value <= 2) next_state = S_WAIT_ADDR; //只允许生成1个或者2个矩阵，成功就等待FSM分配地址
+
+                    if (current_value >= 1 && current_value <= 2) next_state = S_WAIT_ADDR; //只允许生成1个或者2个矩阵，成功就等待FSM分配地址
                     else begin
                         if (rx_data == ASC_CR || rx_data == ASC_LF) next_state = S_RX_M;
                         else next_state = S_ERROR_FLUSH;
@@ -171,7 +169,7 @@ module Input_Subsystem (
             S_USER_INPUT: begin
                 if (rx_pulse && is_delimiter) begin
                     // 提前判断，输入完最后一个数立刻结束，无需多按一次
-                    if (w_input_addr >= expected_count - 1) next_state = S_DONE; //expected_count 是m*n，也就是需要读取多少次，当读取完成跳到done
+                    if (w_input_addr >= expected_count - 1 && !w_error_flag) next_state = S_DONE; //expected_count 是m*n，也就是需要读取多少次，当读取完成跳到done
                     else if (rx_data == ASC_CR || rx_data == ASC_LF) begin
                         if (!w_error_flag) next_state = S_DONE; 
                         // 如果有错，就忽略回车，或者只用来清除错误标志，强制用户继续输入
@@ -181,6 +179,7 @@ module Input_Subsystem (
                     end
                 end                    
                 else if (timeout_cnt >= TIMEOUT_MAX) begin
+                    if (w_error_flag) next_state = S_RX_M;
                     next_state = S_DONE;
                 end
             end
