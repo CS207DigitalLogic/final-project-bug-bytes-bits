@@ -368,7 +368,10 @@ module Input_Subsystem (
                 end
 
                 S_ERROR_FLUSH: begin
-                    w_error_flag <= 1;
+                    if (timeout_cnt >= TIMEOUT_MAX || (rx_pulse && (rx_data == ASC_CR || rx_data == ASC_LF)))
+                        w_error_flag <= 0;
+                    else 
+                        w_error_flag <= 1; 
                     current_value <= 0;
                 end
 
