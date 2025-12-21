@@ -381,6 +381,8 @@ module Input_Subsystem (
             current_value <= 0;
             w_input_addr <= 0;
             w_error_flag <= 0; 
+            w_dims_valid <= 0;
+            w_id_valid <= 0;
         end
     end
 

@@ -8,9 +8,9 @@ module FSM_Controller (
     output reg [7:0] led,
 
     // --- Input Subsystem ---
-    input wire w_dims_valid,  
-    input wire [31:0] i_dim_m,
-    input wire [31:0] i_dim_n,
+    (* mark_debug = "true" *)input wire w_dims_valid,  
+    (* mark_debug = "true" *)input wire [31:0] i_dim_m,
+    (* mark_debug = "true" *)input wire [31:0] i_dim_n,
     input wire w_rx_done,     
     input wire w_error_flag,  
     input wire w_timeout,     
@@ -53,7 +53,7 @@ module FSM_Controller (
     output reg [8:0] w_res_addr,  
     
     output wire [4:0] w_state,
-    output reg w_logic_error 
+    (* mark_debug = "true" *)output reg w_logic_error 
 );
 
     // =========================================================================
@@ -85,7 +85,7 @@ module FSM_Controller (
 
     localparam MAX_TYPES = 25;
 
-    reg [4:0] current_state, next_state;
+    (* mark_debug = "true" *)reg [4:0] current_state, next_state;
     
     // MMU 账本
     reg [31:0] lut_m [0:MAX_TYPES-1];
@@ -97,7 +97,7 @@ module FSM_Controller (
     reg [8:0]  free_ptr;
 
     // 上下文
-    reg [2:0] r_op_code;
+    (* mark_debug = "true" *)reg [2:0] r_op_code;
     reg [1:0] r_stage;
     reg       r_target_stage;
     reg [4:0] r_hit_type_idx; 
@@ -586,6 +586,7 @@ module FSM_Controller (
                     if (w_dims_valid) begin 
                         w_en_input <= 0;
                         w_logic_error <= 0;
+                        w_addr_ready <= 1;
                     end
                 end
 
@@ -633,6 +634,7 @@ module FSM_Controller (
                         else begin
                             w_logic_error <= 1;
                         end
+                        w_addr_ready <= 1;
                     end
                 end
 
@@ -914,6 +916,7 @@ module FSM_Controller (
                     if (w_dims_valid) begin 
                         w_en_input <= 0; 
                         w_logic_error <= 0; 
+                        w_addr_ready <= 1;
                     end
                 end
                 S_WAIT_DECISION: led <= 8'b1000_0000;
