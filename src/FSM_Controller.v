@@ -688,13 +688,13 @@ module FSM_Controller (
                     endcase
                 end
                 
-                S_CALC_GENERATION: begin 
+                S_CALC_GENERATION: begin  //随机生成运算数，使用lfsr
                     random_error_flag <= 0;
                     chk_generation_done <= 0;
                     if (lut_count==0) random_error_flag <= 1;
                     else begin
                         case (r_op_code)
-                            3'b000: begin
+                            3'b000: begin //随机选择一个维度再随机选择一个矩阵
                                 r_op1_m <= lut_m[lfsr_reg[31:0]%lut_count];
                                 r_op1_n <= lut_n[lfsr_reg[31:0]%lut_count];
                                 if (lut_valid_cnt[lfsr_reg[31:0]%lut_count]==1)
@@ -704,7 +704,7 @@ module FSM_Controller (
                                         lfsr_reg[31:31]*lut_m[lfsr_reg[31:0]%lut_count]*lut_n[lfsr_reg[31:0]%lut_count];
                                 chk_generation_done <= 1; r_stage <= 0;
                             end
-                            3'b001: begin
+                            3'b001: begin //随机选择一个维度再在同一维度随机选择两个矩阵
                                 r_op1_m <= lut_m[lfsr_reg[31:0]%lut_count];
                                 r_op1_n <= lut_n[lfsr_reg[31:0]%lut_count];
                                 if (lut_valid_cnt[lfsr_reg[31:0]%lut_count]==1)
@@ -721,7 +721,7 @@ module FSM_Controller (
                                     r_op2_addr <= lut_start_addr[lfsr_reg[31:0]%lut_count]+
                                         lfsr_reg[30:30]*lut_m[lfsr_reg[31:0]%lut_count]*lut_n[lfsr_reg[31:0]%lut_count];
                             end
-                            3'b010: begin
+                            3'b010: begin //随机选择一个维度再随机选择一个矩阵
                                 r_op1_m <= lut_m[lfsr_reg[31:0]%lut_count];
                                 r_op1_n <= lut_n[lfsr_reg[31:0]%lut_count];
                                 if (lut_valid_cnt[lfsr_reg[31:0]%lut_count]==1)
@@ -732,7 +732,7 @@ module FSM_Controller (
                                 r_scalar_val <= random_val;
                                 chk_generation_done <= 1;r_stage <= 0;
                             end
-                            3'b011: begin
+                            3'b011: begin //随机选择一个n1(m2)再随机选择一个m1和n2
                                 if ((!has_m[4] || !has_n[4]) && (!has_m[3] || !has_n[3]) && (!has_m[2] || !has_n[2])
                                     && (!has_m[1] || !has_n[1]) && (!has_m[0] || !has_n[0]))
                                     random_error_flag <= 1;
@@ -766,7 +766,7 @@ module FSM_Controller (
                                     end
                                 end
                             end
-                            default: begin
+                            default: begin //默认矩阵乘法
                                 if ((!has_m[4] || !has_n[4]) && (!has_m[3] || !has_n[3]) && (!has_m[2] || !has_n[2])
                                     && (!has_m[1] || !has_n[1]) && (!has_m[0] || !has_n[0]))
                                     random_error_flag <= 1;
