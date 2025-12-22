@@ -93,7 +93,7 @@ module Calculator_Core (
                     cnt<=0;
                     target_cnt<=0;
                 end
-                S_INIT: begin
+                S_INIT: begin //初始化
                     m1<=i_op1_m;
                     n1<=i_op1_n;
                     m2<=i_op2_m;
@@ -110,7 +110,7 @@ module Calculator_Core (
                         res_n<=i_op2_n;
                     end
                 end
-                S_LOAD_A: begin
+                S_LOAD_A: begin //加载矩阵A
                     row<=0;
                     col<=0;
                     k<=0;
@@ -124,7 +124,7 @@ module Calculator_Core (
                     if (cnt==target_cnt)
                         mem_a[cnt-1]<=i_storage_rdata;
                 end
-                S_LOAD_B: begin
+                S_LOAD_B: begin //加载矩阵B
                     row<=0;
                     col<=0;
                     k<=0;
@@ -140,7 +140,7 @@ module Calculator_Core (
                 end
                 S_CALC: begin
                     case (op)
-                        3'd0: begin
+                        3'd0: begin //转置
                             if (row<m1) begin
                                 if (col<n1) begin
                                     mem_res[col*res_n+row]<=mem_a[row*n1+col];
@@ -152,7 +152,7 @@ module Calculator_Core (
                             end else begin
                             end
                         end
-                        3'd1: begin
+                        3'd1: begin //加法
                             if (row<m1) begin
                                 if (col<n1) begin
                                     mem_res[row*n1+col]<=mem_a[row*n1+col]+mem_b[row*n1+col];
@@ -164,7 +164,7 @@ module Calculator_Core (
                             end else begin
                             end
                         end
-                        3'd2: begin
+                        3'd2: begin //标量乘法
                             if (row<m1) begin
                                 if (col<n1) begin
                                     mem_res[row*n1+col]<=mem_a[row*n1+col]*m2;
@@ -176,7 +176,7 @@ module Calculator_Core (
                             end else begin
                             end
                         end
-                        3'd3: begin
+                        3'd3: begin //矩阵乘法
                             if (row<m1) begin
                                 if (col<n2) begin
                                     if (k<n1) begin
@@ -216,7 +216,7 @@ module Calculator_Core (
                         end
                     endcase
                 end
-                S_WRITE: begin
+                S_WRITE: begin //保存
                     row<=0;
                     col<=0;
                     k<=0;
@@ -228,7 +228,7 @@ module Calculator_Core (
                     end else begin
                     end
                 end
-                S_DONE: begin
+                S_DONE: begin //计算完成
                     row<=0;
                     col<=0;
                     k<=0;
