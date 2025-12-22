@@ -8,12 +8,12 @@ module FSM_Controller (
     output reg [7:0] led,
 
     // --- Input Subsystem ---
-    (* mark_debug = "true" *)input wire w_dims_valid,  
-    (* mark_debug = "true" *)input wire [31:0] i_dim_m,
-    (* mark_debug = "true" *)input wire [31:0] i_dim_n,
+    input wire w_dims_valid,  
+    input wire [31:0] i_dim_m,//从input传过来的维度m，如果是计算模式需要来fsm先判断是否logic_error
+    input wire [31:0] i_dim_n,
     input wire w_rx_done,     
-    input wire w_error_flag,  
-    input wire w_timeout,     
+    input wire w_error_flag,  //input传递错误信号，led留给FSM处理
+    input wire w_timeout, //这个是timer的信号，不是input的    
     
     input wire [31:0] i_input_id_val, 
     input wire w_id_valid,            
@@ -53,7 +53,7 @@ module FSM_Controller (
     output reg [8:0] w_res_addr,  
     
     output wire [4:0] w_state,
-    (* mark_debug = "true" *)output reg w_logic_error 
+    output reg w_logic_error 
 );
 
     // =========================================================================
@@ -85,23 +85,23 @@ module FSM_Controller (
 
     localparam MAX_TYPES = 25;
 
-    (* mark_debug = "true" *)reg [4:0] current_state, next_state;
+    reg [4:0] current_state, next_state;
     
     // MMU 账本
-    reg [31:0] lut_m [0:MAX_TYPES-1];
+    reg [31:0] lut_m [0:MAX_TYPES-1]; //存矩阵维度m
     reg [31:0] lut_n [0:MAX_TYPES-1];
-    reg [8:0]  lut_start_addr [0:MAX_TYPES-1];
-    reg        lut_idx [0:MAX_TYPES-1];
-    reg [1:0]  lut_valid_cnt [0:MAX_TYPES-1];
-    reg [4:0]  lut_count;
-    reg [8:0]  free_ptr;
+    reg [8:0]  lut_start_addr [0:MAX_TYPES-1]; //存这个类型开始的地址
+    reg        lut_idx [0:MAX_TYPES-1]; //0或者1，代表下一个矩阵从这个type块的哪里开始存
+    reg [1:0]  lut_valid_cnt [0:MAX_TYPES-1];//存该type有几个已经存好的合法矩阵
+    reg [4:0]  lut_count;//存一共有几个矩阵的type
+    reg [8:0]  free_ptr;//自由指针，指向下一个空存储位
 
     // 上下文
-    (* mark_debug = "true" *)reg [2:0] r_op_code;
+    reg [2:0] r_op_code; //这个是计算模式的操作码，每一个对应一个操作
     reg [1:0] r_stage;
     reg       r_target_stage;
     reg [4:0] r_hit_type_idx; 
-    reg       r_hit_found;
+    reg       r_hit_found; //代表在查找表里找到有这个type的矩阵
     reg [1:0] r_selected_id;  
     
     reg [31:0] r_scalar_val; // 标量寄存器
@@ -124,14 +124,14 @@ module FSM_Controller (
     reg btn2_d0, btn2_d1;
 
     wire btn0_f, btn1_f, btn2_f;
-
+    //按键消抖的例化
     button_debouncer ubtn0(.clk(clk), .rst_n(rst_n), .key_in(btn[0]), .key_flag(btn0_f));
     button_debouncer ubtn1(.clk(clk), .rst_n(rst_n), .key_in(btn[1]), .key_flag(btn1_f));
     button_debouncer ubtn2(.clk(clk), .rst_n(rst_n), .key_in(btn[2]), .key_flag(btn2_f));
 
-    wire btn_confirm_pose;
-    wire btn_retry_pose;
-    wire btn_menu_pose;   
+    wire btn_confirm_pose;//按btn0
+    wire btn_retry_pose;//按btn1
+    wire btn_menu_pose; //按btn2  
 
     assign btn_confirm_pose = btn0_d0 & ~btn0_d1;
     assign btn_retry_pose   = btn1_d0 & ~btn1_d1;
@@ -149,8 +149,9 @@ module FSM_Controller (
     reg [4:0] has_m, has_n;
     reg [24:0] has;
 
-    reg random_error_flag;
+    reg random_error_flag; //随机选择操作数时不合法则亮起，直接跳到error态
 
+    //伪随机数生成
     reg [31:0] lfsr_reg;
     wire [31:0] random_val;
     assign random_val = lfsr_reg[31:0] % 10;
@@ -163,14 +164,14 @@ module FSM_Controller (
     // =========================================================================
     // 0. 辅助组合逻辑 
     // =========================================================================
-    reg       calc_match_found;
+    reg       calc_match_found; 
     reg [4:0] calc_match_index;
-    reg [8:0] calc_final_addr;
-    reg [8:0] single_mat_size;
+    reg [8:0] calc_final_addr; //下一个矩阵应该存在哪
+    reg [8:0] single_mat_size; //单个矩阵大小，给free_ptr更新用
     integer i;
     reg [31:0] calc_pred_m, calc_pred_n;
-    reg [31:0] search_m, search_n;
-    reg        enable_search;
+    reg [31:0] search_m, search_n; //寄存传过来的维度
+    reg        enable_search; //查找模块使能
 
     always @(*) begin
         calc_pred_m = 0; calc_pred_n = 0;
@@ -193,26 +194,26 @@ module FSM_Controller (
         endcase
     end
 
-    always @(*) begin
+    always @(*) begin //组合逻辑查表是否有请求的矩阵type
         calc_match_found = 0;
         calc_match_index = 0;
         calc_final_addr  = 0;
         
         if (current_state == S_INPUT_MODE || current_state == S_GEN_MODE || current_state == S_MENU_DISP_GET_DIM) begin
             search_m = i_dim_m; search_n = i_dim_n;
-            enable_search = w_dims_valid; 
+            enable_search = w_dims_valid; //收到信号才使能
         end else begin
             search_m = calc_pred_m; search_n = calc_pred_n;
-            enable_search = (current_state == S_CALC_EXECUTE); 
+            enable_search = (current_state == S_CALC_EXECUTE); //矩阵计算完存储下来
         end
 
-        single_mat_size  = (search_m * search_n);
+        single_mat_size  = (search_m * search_n); //单个矩阵大小
         if (enable_search) begin
             for (i = 0; i < MAX_TYPES; i = i + 1) begin
-                if (i < lut_count) begin
+                if (i < lut_count) begin //仅遍历有的type数
                     if (lut_m[i] == search_m && lut_n[i] == search_n) begin
-                        calc_match_found = 1;
-                        calc_match_index = i[4:0];
+                        calc_match_found = 1; //找到了
+                        calc_match_index = i[4:0]; //把匹配的idx存下来
                     end
                 end
             end
@@ -498,41 +499,42 @@ module FSM_Controller (
                 S_INPUT_MODE, S_GEN_MODE: begin
                     w_en_input <= 1;
                     w_task_mode <= 0;
-                    w_is_gen_mode <= (current_state == S_GEN_MODE);
+                    w_is_gen_mode <= (current_state == S_GEN_MODE); // w_is_gen_mode 的赋值逻辑
                     
+                    //led分配逻辑
                     if (w_error_flag) led <= 8'b1111_1111;
                     else if (w_is_gen_mode) led <= 8'b0000_0100;
                     else led <= 8'b0000_0010;
                     
-                    if (w_dims_valid) begin
+                    if (w_dims_valid) begin //一个周期后进入这个块并且告诉input说地址分配完成
                         w_addr_ready <= 1;
-                        if (w_addr_ready == 0)
+                        if (w_addr_ready == 0) //这个是造成了一个大bug的罪魁祸首，
                             w_base_addr_to_input <= calc_final_addr;
-                    end else w_addr_ready <= 0;
+                    end else w_addr_ready <= 0; //默认保持低电平
 
-                    if (w_dims_valid && w_addr_ready == 0) begin
-                        r_alloc_active <= 1; 
+                    if (w_dims_valid && w_addr_ready == 0) begin //收到input的请求信号先进入这个块 很容易在一个时钟周期内完成地址分配任务
+                        r_alloc_active <= 1; //准备好，可能要回退指针
 
-                        if (calc_match_found) begin
-                            r_alloc_is_new <= 0;
-                            r_alloc_idx <= calc_match_index;
+                        if (calc_match_found) begin //组合逻辑里找到对应传过来的m和n了
+                            r_alloc_is_new <= 0; //回退的不是free_ptr
+                            r_alloc_idx <= calc_match_index; //备份可能回退的idx
                             r_backup_valid_cnt <= lut_valid_cnt[calc_match_index]; // 备份旧的 valid_cnt
 
-                            lut_idx[calc_match_index] <= ~lut_idx[calc_match_index];
+                            lut_idx[calc_match_index] <= ~lut_idx[calc_match_index]; //由于只有0 1，所以直接取反
                             if (lut_valid_cnt[calc_match_index] < 2)
-                                lut_valid_cnt[calc_match_index] <= lut_valid_cnt[calc_match_index] + 1;
+                                lut_valid_cnt[calc_match_index] <= lut_valid_cnt[calc_match_index] + 1;//目前合法的存上的矩阵有多少
                         end 
                         else begin
                             if (lut_count < MAX_TYPES) begin
-                                r_alloc_is_new <= 1;
+                                r_alloc_is_new <= 1; //回退free_ptr即可
                                 r_backup_free_ptr <= free_ptr; // 备份旧的 free_ptr
 
-                                lut_m[lut_count] <= i_dim_m;
+                                lut_m[lut_count] <= i_dim_m; //记录新type
                                 lut_n[lut_count] <= i_dim_n;
-                                lut_start_addr[lut_count] <= free_ptr;
-                                lut_idx[lut_count] <= 1; lut_valid_cnt[lut_count] <= 1;
-                                free_ptr <= free_ptr + (single_mat_size << 1);
-                                lut_count <= lut_count + 1;
+                                lut_start_addr[lut_count] <= free_ptr; //记录新的开始地址
+                                lut_idx[lut_count] <= 1; lut_valid_cnt[lut_count] <= 1; //更新count
+                                free_ptr <= free_ptr + (single_mat_size << 1); //更新自由指针
+                                lut_count <= lut_count + 1; //总type+1
                             end
                         end
                     end
@@ -544,9 +546,9 @@ module FSM_Controller (
                         has[(lut_m[lut_count-1]-1)*5+lut_n[lut_count-1]-1] <= 1;
                     end
                     else if (w_error_flag) begin
-                        if (r_alloc_active) begin
+                        if (r_alloc_active) begin //input报错了，而且是w_dims_valid之后的报错
                             r_alloc_active <= 0;
-                            if (r_alloc_is_new) begin
+                            if (r_alloc_is_new) begin //进行指针回退
                                 lut_count <= lut_count - 1;
                                 free_ptr <= r_backup_free_ptr;
                             end else begin
@@ -557,8 +559,8 @@ module FSM_Controller (
                     end
                 end
                 
-                S_MENU_DISP_GET_DIM: begin
-                    w_en_input <= 1; w_task_mode <= 0; w_base_addr_to_input <= free_ptr;
+                S_MENU_DISP_GET_DIM: begin//直接展示模式的入口
+                    w_en_input <= 1; w_task_mode <= 0; w_base_addr_to_input <= free_ptr; //借用free_ptr的空间，先存在临时空间里面
                     led <= 8'b0001_0000;
                     if (w_dims_valid) w_addr_ready <= 1; else w_addr_ready <= 0;
                     if (w_rx_done) w_en_input <= 0;
