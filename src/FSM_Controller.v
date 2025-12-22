@@ -227,7 +227,7 @@ module FSM_Controller (
         end
     end
 
-    always @(*) begin
+    always @(*) begin//目前用组合逻辑给display模块赋值
         // 1. 默认值
         w_disp_m = 0; w_disp_n = 0; w_disp_total_cnt = 0; w_disp_base_addr = 0;
         // 2. 根据状态或模式选择输出
@@ -508,7 +508,7 @@ module FSM_Controller (
                     
                     if (w_dims_valid) begin //一个周期后进入这个块并且告诉input说地址分配完成
                         w_addr_ready <= 1;
-                        if (w_addr_ready == 0) //这个是造成了一个大bug的罪魁祸首，
+                        if (w_addr_ready == 0) //这个是造成了一个大bug的罪魁祸首，因为dims_valid并未被拉低，所以第二次进入这个块的时候因为查找表的各种参数已经更新了，导致错误的finaladdr又被赋值了一次，导致基地址错误
                             w_base_addr_to_input <= calc_final_addr;
                     end else w_addr_ready <= 0; //默认保持低电平
 
@@ -570,12 +570,12 @@ module FSM_Controller (
                     if (w_disp_done) w_en_display <= 0;
                 end
 
-                S_CALC_SELECT_OP: begin
+                S_CALC_SELECT_OP: begin//计算模式的入口，选择计算模式
                     led <= 8'b0000_1000;
                     r_op_code <= sw[7:5]; w_op_code <= sw[7:5];
                     is_calc_gen_mode <= sw[3];
                     chk_generation_done <= 0;
-                    if (sw[7:5] == 3'b000) r_target_stage <= 0; else r_target_stage <= 1; 
+                    if (sw[7:5] == 3'b000) r_target_stage <= 0; else r_target_stage <= 1; //
                     r_stage <= 0; w_logic_error <= 0; 
                 end
                 S_CALC_SHOW_SUMMARY: begin
@@ -583,7 +583,7 @@ module FSM_Controller (
                     if (w_disp_done) w_en_display <= 0;
                 end
 
-                S_CALC_GET_DIM: begin
+                S_CALC_GET_DIM: begin //获取用户输入的维度
                     w_en_input <= 1; w_task_mode <= 1; 
                     if (w_dims_valid) begin 
                         w_en_input <= 0;
@@ -592,7 +592,7 @@ module FSM_Controller (
                     end
                 end
 
-                S_CALC_FILTER: begin
+                S_CALC_FILTER: begin //在查找表里查找维度
                     led <= 8'b0000_1000;
                     if (has[(i_dim_m-1)*5+i_dim_n-1]) w_logic_error <= 0;
                     else w_logic_error <= 1; 
@@ -604,26 +604,26 @@ module FSM_Controller (
                     end
                 end
 
-                S_CALC_SHOW_LIST: begin
+                S_CALC_SHOW_LIST: begin 
                     if (!r_hit_found) begin
-                        w_logic_error <= 1; 
+                        w_logic_error <= 1; //如果没找到就报逻辑错误
                     end
                     else begin
-                        w_en_display <= 1; w_disp_mode <= 1;
+                        w_en_display <= 1; w_disp_mode <= 1; //找到了就展示，mode1是列表模式
                         if (w_disp_done) w_en_display <= 0;
                     end
                 end
 
-                S_CALC_GET_ID: begin
+                S_CALC_GET_ID: begin //然后获取矩阵编号
                     w_en_input <= 1; w_task_mode <= 2;
                     if (w_id_valid) begin
                         if (i_input_id_val > 0 && i_input_id_val <= lut_valid_cnt[r_hit_type_idx]) begin
                             w_logic_error <= 0; 
                             r_selected_id <= i_input_id_val[1:0];
-                            if (r_stage == 0) begin
-                                w_op1_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
+                            if (r_stage == 0) begin 
+                                w_op1_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));//这个是给计算模块的
                                 r_op1_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
-                                w_op1_m <= lut_m[r_hit_type_idx]; w_op1_n <= lut_n[r_hit_type_idx];
+                                w_op1_m <= lut_m[r_hit_type_idx]; w_op1_n <= lut_n[r_hit_type_idx];//给计算模块的
                                 r_op1_m <= i_dim_m; r_op1_n <= i_dim_n;
                             end else begin
                                 w_op2_addr <= lut_start_addr[r_hit_type_idx] + ((i_input_id_val - 1) * (i_dim_m * i_dim_n));
@@ -648,7 +648,7 @@ module FSM_Controller (
                     end
                 end
 
-                S_CALC_GET_SCALAR: begin
+                S_CALC_GET_SCALAR: begin //如果是标量乘法就跳到这个获取标量
                     // 1. 关闭 Input 模块
                     w_en_input <= 0; 
                     w_logic_error <= 0;
@@ -662,7 +662,7 @@ module FSM_Controller (
                     end
                 end
 
-                S_CALC_CHECK_VALID: begin
+                S_CALC_CHECK_VALID: begin //检测加法以及乘法的操作数维度是否合法
                     w_logic_error<=0;
                     case (r_op_code)
                         3'b000: chk_valid_done<=1;
@@ -688,7 +688,7 @@ module FSM_Controller (
                     endcase
                 end
                 
-                S_CALC_GENERATION: begin
+                S_CALC_GENERATION: begin 
                     random_error_flag <= 0;
                     chk_generation_done <= 0;
                     if (lut_count==0) random_error_flag <= 1;
@@ -805,9 +805,9 @@ module FSM_Controller (
                 end
 
 
-                S_CALC_GEN_SHOW: begin
+                S_CALC_GEN_SHOW: begin//矩阵随机操作数的展示
                     case (r_stage)
-                        0: begin 
+                        0: begin //r_stage为0，代表第一个矩阵的展示
                             if (w_disp_done) begin
                                 if (w_en_display) begin
                                     w_en_display <= 0;
@@ -821,10 +821,10 @@ module FSM_Controller (
                         end
 
 
-                        1: begin 
+                        1: begin //第二个矩阵的展示
                             if (r_op_code == 3'b000) begin
                                 r_stage <= 2;
-                                // 转置
+                                // 转置只需要展示一个矩阵，直接跳到下一个状态
                             end
                             else if (r_op_code == 3'b010) begin
                                 // 标量乘法展示逻辑
@@ -840,7 +840,7 @@ module FSM_Controller (
                                 end
                             end
                         
-                            else begin
+                            else begin //加法和乘法的第二个矩阵展示
                                 if (w_disp_done) begin
                                     if (w_en_display) begin
                                         w_en_display <= 0;
@@ -854,20 +854,19 @@ module FSM_Controller (
                             end
                         end
 
-                        2: begin 
+                        2: begin //结束展示
                             // 等待 Stage 2 跳转
                             w_en_display <= 0;
                         end
                     endcase
                 end
                 
-                S_CALC_EXECUTE: begin
+                S_CALC_EXECUTE: begin //开始正式计算
                     w_start_calc <= 1; w_op_code <= r_op_code; w_res_addr <= calc_final_addr;
-
+                    //这里还要赋值一次的原因是随机选择模块没有连到矩阵计算模块的输入上，只赋值了内部reg
                     w_op1_addr <= r_op1_addr;
-                    w_op1_m    <= r_op1_m;
+                    w_op1_m    <= r_op1_m; 
                     w_op1_n    <= r_op1_n;
-                    
                     w_op2_addr <= r_op2_addr;
                     w_op2_m    <= r_op2_m;
                     w_op2_n    <= r_op2_n;
@@ -884,7 +883,7 @@ module FSM_Controller (
                         default: begin  r_res_m=r_op1_m; r_res_n=r_op2_n; end
                     endcase
                     
-                    if (w_calc_done) begin
+                    if (w_calc_done) begin //计算结束存储矩阵到内存以及更新查找表
                         w_start_calc <= 0;
                         has_m[r_res_m-1] <= 1;
                         has_n[r_res_n-1] <= 1;
@@ -904,13 +903,13 @@ module FSM_Controller (
                         end
                     end
                 end
-                S_CALC_RES_SHOW: begin
-                    w_en_display <= 1; w_disp_mode <= 0; 
+                S_CALC_RES_SHOW: begin //展示计算结果
+                    w_en_display <= 1; w_disp_mode <= 0; //单矩阵展示模式
                     if (w_disp_done) w_en_display <= 0;
                 end
-                S_CALC_ERROR_RESET: begin
+                S_CALC_ERROR_RESET: begin //错误重置
                     r_stage <= 0;
-                    w_en_input <= 0;
+                    w_en_input <= 0; //这里拉低也导致了一个大影响bug，input内部信号没复位导致的循环报错
                 end
                 S_CALC_WAIT_TIME: begin
                     led <= 8'b1111_1111;
@@ -924,8 +923,8 @@ module FSM_Controller (
                 S_WAIT_DECISION: led <= 8'b1000_0000;
                 S_ERROR: begin
                     w_en_input <= 0;
-                    random_error_flag <= 0;
-                    led <= 8'b1111_1111;
+                    random_error_flag <= 0; 
+                    led <= 8'b1111_1111; //全亮报错
                 end
             endcase
         end
