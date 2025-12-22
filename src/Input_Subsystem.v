@@ -85,8 +85,6 @@ module Input_Subsystem (
                 end
             end else if (state == S_ERROR_FLUSH) begin
                 if (rx_pulse) begin
-                    // 如果检测到有数据输入（无论是数字还是分隔符），重置计时
-                    timeout_cnt <= 0;
                 end else if (timeout_cnt < TIMEOUT_MAX_ERROR) begin
                     // 没有数据时，持续计时
                     timeout_cnt <= timeout_cnt + 1;
