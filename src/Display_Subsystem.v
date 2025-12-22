@@ -5,9 +5,8 @@ module Display_Subsystem (
     input wire rst_n,
 
     // --- FSM 控制接口 ---
-    input wire w_en_display,          // 启动展示
-    // 0=单矩阵(Storage), 1=列表(Storage+Cache), 2=汇总, 3=缓存回显(Cache)
-    input wire [2:0] w_disp_mode,
+    input wire w_en_display,   // 启动展示
+    input wire [2:0] w_disp_mode,    // 0=单矩阵(Storage), 1=列表(Storage+Cache), 2=汇总, 3=缓存回显(Cache)
 
     // 矩阵参数
     input wire [31:0] w_disp_m,       // 矩阵行数
@@ -151,7 +150,7 @@ module Display_Subsystem (
             S_INIT: begin
                 if (w_disp_mode == 1)      next_state = S_LIST_SHOW_ID;
                 else if (w_disp_mode == 2) next_state = S_SUM_TOTAL;
-                else if (w_disp_mode == 0 || w_disp_mode == 3) next_state = S_PRE_PRINT_CR;
+                else if (w_disp_mode == 0 || w_disp_mode == 3) next_state = S_PRE_PRINT_CR; //单矩阵展示和缓存回显都先打印换行去
                 else if (w_disp_mode == 4) next_state = S_SCALAR_PREP;
                 else                       next_state = S_DONE;
             end
@@ -220,7 +219,7 @@ module Display_Subsystem (
             S_SCALAR_DONE_LF: if (w_tx_ready) next_state = S_DONE;
 
             S_PRE_PRINT_CR: if (w_tx_ready) next_state = S_PRE_PRINT_LF;
-            S_PRE_PRINT_LF: if (w_tx_ready) next_state = r_return_state;
+            S_PRE_PRINT_LF: if (w_tx_ready) next_state = r_return_state; //回退状态，打印完回车换行再进行下一步操作
 
             // --- Decimal Conversion Engine ---
             S_CONV_START: next_state = S_CONV_ITER;
@@ -277,7 +276,7 @@ module Display_Subsystem (
                 S_INIT: begin
                     mat_idx <= 0; row_cnt <= 0; col_cnt <= 0; tx_step <= 0;r_pad_en <= 0;
                     
-                    // 【修复核心】：Mode 0 (单矩阵) 和 Mode 1 (列表) 都会写缓存，必须同步更新缓存维度！
+                    // Mode 0 (单矩阵) 和 Mode 1 (列表) 都会写缓存，必须同步更新缓存维度！
                     if (w_disp_mode == 1 || w_disp_mode == 0) begin 
                         r_cached_m <= w_disp_m; 
                         r_cached_n <= w_disp_n; 
@@ -293,7 +292,7 @@ module Display_Subsystem (
                     else if (w_disp_mode == 0) begin
                         mat_idx <= 0;
                     end
-
+                    //进入r_return_state后的重新状态赋值
                     if (w_disp_mode == 0)      r_return_state <= S_LIST_REQ;    // Mode 0 去矩阵请求
                     else if (w_disp_mode == 3) r_return_state <= S_CACHE_FETCH; // Mode 3 去缓存读取
                 end

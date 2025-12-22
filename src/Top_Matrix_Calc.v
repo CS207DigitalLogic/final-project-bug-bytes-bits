@@ -73,7 +73,7 @@ module Top_Module (
     wire w_timeout;
     wire [3:0] w_timer_val;
     wire w_timer_start_pulse;
-    (* mark_debug = "true" *)wire w_seg_en;
+    (* mark_debug = "true" *)wire w_seg_en;//数码管使能信号
     (* mark_debug = "true" *)wire w_seg_mode;
     
     wire w_logic_error; 
@@ -119,7 +119,7 @@ module Top_Module (
     // C. 显示模式
     // 【修改】移除了 S_ERROR 的判断
     assign w_seg_mode = ((w_input_error) || 
-                         (w_logic_error)) ? 1'b1 : 1'b0;
+                         (w_logic_error)) ? 1'b1 : 1'b0; //只要有error就置1（对应数码管的w_disp_mode)变为展示数字模式，否则为展示字母模式
 
     // =========================================================================
     // 3. 模块例化
@@ -217,7 +217,7 @@ module Top_Module (
         // Timer 运行条件：有错误发生 且 还没死机
         .i_en( (w_logic_error) && (w_state != S_ERROR) ), 
         
-        .sw(ssw[3:0]), 
+        .sw(ssw[3:0]), //小开关的低四位控制倒计时的动态配置
         .w_timeout(w_timeout),
         .w_time_val(w_timer_val)
     );
