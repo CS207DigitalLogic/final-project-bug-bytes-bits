@@ -73,8 +73,8 @@ module Top_Module (
     wire w_timeout;
     wire [3:0] w_timer_val;
     wire w_timer_start_pulse;
-    (* mark_debug = "true" *)wire w_seg_en;//数码管使能信号
-    (* mark_debug = "true" *)wire w_seg_mode;
+    wire w_seg_en;//数码管使能信号
+    wire w_seg_mode;
     
     wire w_logic_error; 
 
