@@ -39,8 +39,8 @@ module Input_Subsystem (
 
     localparam S_ERROR_FLUSH = 9;
 
-    localparam TIMEOUT_MAX = 32'd10_000_000; //最大超时限制，如果在这个实现内未收到rx_pulse则自动跳到done（当输入补全补零的配合）
-    localparam TIMEOUT_MAX_ERROR = 32'd75_000_000; //错误时的最大Timeout,4s
+    localparam TIMEOUT_MAX = 32'd30_000_000; //最大超时限制，如果在这个实现内未收到rx_pulse则自动跳到done（当输入补全补零的配合）
+
 
     reg [3:0] state, next_state;//状态寄存器
     reg [31:0] current_value; //寄存当前从串口读取的值是多少
@@ -83,15 +83,7 @@ module Input_Subsystem (
                     // 没有数据时，持续计时
                     timeout_cnt <= timeout_cnt + 1;
                 end
-            end else if (state == S_ERROR_FLUSH) begin
-                if (rx_pulse) begin
-                    // 如果检测到有数据输入（无论是数字还是分隔符），重置计时
-                    timeout_cnt <= 0;
-                end else if (timeout_cnt < TIMEOUT_MAX_ERROR) begin
-                    // 没有数据时，持续计时
-                    timeout_cnt <= timeout_cnt + 1;
-                end
-            end
+            end 
             else begin
                 // 其他状态下清零计数器
                 timeout_cnt <= 0;
@@ -206,7 +198,7 @@ module Input_Subsystem (
                 if (rx_pulse && (rx_data == ASC_CR || rx_data == ASC_LF)) begin
                     next_state = S_RX_M;
                 end
-                else if (timeout_cnt >= TIMEOUT_MAX_ERROR) begin//timeout之后才会跳到S_RX_M（目前第一个块不会被触发，不知道是检测不到串口的换行还是什么原因）
+                else if (timeout_cnt >= TIMEOUT_MAX) begin//timeout之后才会跳到S_RX_M（目前第一个块不会被触发，不知道是检测不到串口的换行还是什么原因）
                     next_state = S_RX_M; 
                 end
             end
@@ -379,7 +371,7 @@ module Input_Subsystem (
                 end
 
                 S_ERROR_FLUSH: begin
-                    if (timeout_cnt >= TIMEOUT_MAX_ERROR || (rx_pulse && (rx_data == ASC_CR || rx_data == ASC_LF))) //timeout之后并且错误，跳回重新输入状态，同时清除错误
+                    if (timeout_cnt >= TIMEOUT_MAX || (rx_pulse && (rx_data == ASC_CR || rx_data == ASC_LF))) //timeout之后并且错误，跳回重新输入状态，同时清除错误
                         w_error_flag <= 0;
                     else 
                         w_error_flag <= 1; 
